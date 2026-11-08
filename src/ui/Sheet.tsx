@@ -1,8 +1,14 @@
+// Material 3 bottom sheets: surfaceContainerLow, corner 28, a 32x4 handle;
+// actions as segmented rows (2px apart, round outside, tight inside).
+import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ReactNode } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { IconName } from "./icons";
+import { Avatar } from "./Avatar";
 import { useKeyboardHeight } from "./keyboard";
-import { makeStyles, useColors } from "./theme";
+import { segmentCorners, withPositions, type Position } from "./press";
+import { emphasized, makeStyles, shape, space, typography, useColors } from "./theme";
 
 export function Sheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
   const styles = useStyles();
@@ -11,31 +17,105 @@ export function Sheet({ visible, onClose, children }: { visible: boolean; onClos
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { paddingBottom: (keyboard || insets.bottom) + 12, maxHeight: "85%" }]}>
-        <View style={styles.handle} />
+      <View style={[styles.sheet, { paddingBottom: (keyboard || insets.bottom) + space.lg, maxHeight: "85%" }]}>
+        <View style={styles.handleArea}>
+          <View style={styles.handle} />
+        </View>
         {children}
       </View>
     </Modal>
   );
 }
 
-export function SheetAction({ label, detail, onPress, danger, disabled }: { label: string; detail?: string; onPress: () => void; danger?: boolean; disabled?: boolean }) {
+/** A sheet's title: a rounded-square avatar, the title and a line about it. */
+export function SheetHeader({ title, meta, icon, avatar }: { title: string; meta?: string; icon?: IconName; avatar?: ReactNode }) {
   const colors = useColors();
   const styles = useStyles();
   return (
-    <Pressable style={({ pressed }) => [styles.action, pressed && styles.pressed, disabled && { opacity: 0.4 }]} onPress={onPress} disabled={disabled}>
-      <Text style={[styles.actionText, danger && { color: colors.blocked }]}>{label}</Text>
-      {detail ? <Text style={styles.detail}>{detail}</Text> : null}
+    <View style={styles.header}>
+      {avatar ?? (icon ? <Avatar icon={icon} size={48} square color={colors.onSecondaryContainer} background={colors.secondaryContainer} /> : null)}
+      <View style={styles.flex}>
+        <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
+          {title}
+        </Text>
+        {meta ? (
+          <Text style={styles.meta} numberOfLines={1}>
+            {meta}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+const OUTER = shape.largeIncreased;
+const INNER = shape.extraSmall;
+
+/** Joins its SheetActions into one segmented list. */
+export function SheetActions({ children }: { children: ReactNode }) {
+  const styles = useStyles();
+  return <View style={styles.actions}>{withPositions(children)}</View>;
+}
+
+/** A row of a sheet. Inside SheetActions it joins the segmented list; alone it is a card of its own. */
+export function SheetAction({
+  label,
+  detail,
+  icon,
+  onPress,
+  danger,
+  disabled,
+  position = "only",
+}: {
+  label: string;
+  detail?: string;
+  icon?: IconName;
+  onPress: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+  position?: Position;
+}) {
+  const colors = useColors();
+  const styles = useStyles();
+  const [tl, tr, br, bl] = segmentCorners(position, OUTER, INNER, "column");
+  const ink = danger ? colors.error : colors.onSurface;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      style={({ pressed }) => [
+        styles.action,
+        { borderTopLeftRadius: tl, borderTopRightRadius: tr, borderBottomRightRadius: br, borderBottomLeftRadius: bl },
+        position === "only" && styles.alone,
+        pressed && styles.pressed,
+        disabled && styles.disabled,
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      {icon ? <Ionicons name={icon} size={24} color={danger ? colors.error : colors.onSurfaceVariant} /> : null}
+      <View style={styles.flex}>
+        <Text style={[styles.actionText, { color: ink }]}>{label}</Text>
+        {detail ? <Text style={styles.detail}>{detail}</Text> : null}
+      </View>
     </Pressable>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
   backdrop: { flex: 1, backgroundColor: colors.backdrop },
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 8, paddingHorizontal: 8 },
-  handle: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 8 },
-  action: { paddingVertical: 14, paddingHorizontal: 14, borderRadius: 10 },
-  pressed: { backgroundColor: colors.surfaceHigh },
-  actionText: { color: colors.text, fontSize: 16 },
-  detail: { color: colors.muted, fontSize: 13, marginTop: 2 },
+  sheet: { backgroundColor: colors.surfaceContainerLow, borderTopLeftRadius: shape.extraLarge, borderTopRightRadius: shape.extraLarge, paddingHorizontal: space.lg },
+  handleArea: { alignItems: "center", paddingTop: space.lg, paddingBottom: space.md },
+  handle: { width: 32, height: 4, borderRadius: 2, backgroundColor: colors.onSurfaceVariant, opacity: 0.4 },
+  header: { flexDirection: "row", alignItems: "center", gap: space.lg, paddingHorizontal: space.sm, paddingTop: space.xs, paddingBottom: space.lg },
+  flex: { flex: 1, gap: 2 },
+  title: { ...emphasized.titleLarge, color: colors.onSurface },
+  meta: { ...typography.bodyMedium, color: colors.onSurfaceVariant },
+  actions: { gap: 2 },
+  action: { flexDirection: "row", alignItems: "center", gap: space.lg, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 56, backgroundColor: colors.surfaceContainerLowest },
+  alone: { marginBottom: 2 },
+  pressed: { backgroundColor: colors.surfaceContainerHigh },
+  disabled: { opacity: 0.38 },
+  actionText: { ...typography.bodyLarge },
+  detail: { ...typography.bodyMedium, color: colors.onSurfaceVariant },
 }));

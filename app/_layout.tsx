@@ -7,7 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { fleet, startFleet } from "../src/fleet-store";
 import { loadSettings } from "../src/settings";
 import { startUpdateChecks } from "../src/updates";
-import { useColors } from "../src/ui/theme";
+import { emphasized, useColors } from "../src/ui/theme";
 
 export default function Layout() {
   const colors = useColors();
@@ -27,10 +27,13 @@ export default function Layout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="auto" />
+      {/* Screens that draw their own top app bar (src/ui/TopAppBar) hide this header with <Stack.Screen options={{ headerShown: false }} />. */}
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: colors.surface },
-          headerTintColor: colors.text,
+          headerStyle: { backgroundColor: colors.bg },
+          headerShadowVisible: false,
+          headerTintColor: colors.onSurface,
+          headerTitleStyle: { fontFamily: emphasized.titleLarge.fontFamily, fontSize: emphasized.titleLarge.fontSize, fontWeight: emphasized.titleLarge.fontWeight },
           contentStyle: { backgroundColor: colors.bg },
         }}
       >

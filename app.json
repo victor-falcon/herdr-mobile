@@ -34,6 +34,17 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/RobotoFlex-Medium.ttf",
+            "./assets/fonts/RobotoMono-Regular.ttf",
+            "./assets/fonts/RobotoMono-Medium.ttf",
+            "./assets/fonts/RobotoMono-Bold.ttf"
+          ]
+        }
+      ],
       "./plugins/with-ios-scene.js",
       "./plugins/with-release-signing.js",
       [

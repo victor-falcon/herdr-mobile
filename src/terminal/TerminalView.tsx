@@ -6,7 +6,7 @@ import { Linking, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { toBase64, utf8Encode } from "../hc/bytes";
 import type { AttachStream, HcConnection } from "../hc/connection";
-import { makeStyles, terminalDisplay, useColors, type Colors } from "../ui/theme";
+import { makeStyles, shape, space, terminalDisplay, typography, useColors, type Colors } from "../ui/theme";
 import { rememberFitSize } from "./fit";
 import { TERMINAL_HTML } from "./terminal-html.generated";
 
@@ -32,7 +32,7 @@ const LIGHT_ANSI = {
 };
 
 function terminalTheme(colors: Colors) {
-  const base = { background: colors.bg, foreground: colors.text, cursor: colors.text };
+  const base = { background: colors.bg, foreground: colors.onSurface, cursor: colors.onSurface };
   return !colors.dark ? { ...base, ...LIGHT_ANSI, cursorAccent: colors.bg, selectionBackground: "#0969da33" } : base;
 }
 
@@ -230,6 +230,6 @@ function describe(r: { reason?: string; exit_code?: number | null }): string {
 const useStyles = makeStyles((colors) => ({
   wrap: { flex: 1, backgroundColor: colors.bg },
   web: { flex: 1, backgroundColor: colors.bg },
-  notice: { position: "absolute", top: 8, alignSelf: "center", backgroundColor: colors.surfaceHigh, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
-  noticeText: { color: colors.text, fontSize: 13 },
+  notice: { position: "absolute", top: space.sm, alignSelf: "center", backgroundColor: colors.surfaceContainerHigh, borderRadius: shape.small, paddingHorizontal: space.lg, paddingVertical: 6 },
+  noticeText: { ...typography.labelLarge, color: colors.onSurface },
 }));

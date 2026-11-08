@@ -6,6 +6,13 @@ export function linkColor(state: LinkView["state"], colors: Colors): string {
   return state === "connected" ? colors.done : state === "connecting" ? colors.working : colors.blocked;
 }
 
+/** A machine's avatar: done colours when connected, working while connecting, error when it can't be reached. */
+export function linkAvatarColors(state: LinkView["state"], colors: Colors): { color: string; background: string } {
+  if (state === "connected") return { color: colors.done, background: colors.doneContainer };
+  if (state === "connecting") return { color: colors.working, background: colors.workingContainer };
+  return { color: colors.onErrorContainer, background: colors.errorContainer };
+}
+
 /** What went wrong reaching a machine, and what to do about it. */
 export function explainError(raw: string | undefined, m: MachineConfig): string | undefined {
   if (!raw) return raw;
