@@ -211,10 +211,14 @@ export const typography = {
   labelMedium: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: "500" },
 } satisfies Record<string, Type>;
 
-/** The emphasized scale: heavier, and Roboto Flex for headlines and large titles. */
+/**
+ * The emphasized scale: heavier, and Roboto Flex for headlines and large titles.
+ * A bundled font's weight comes from its family (RobotoFlex-Medium is 500), so
+ * those keep fontWeight normal.
+ */
 export const emphasized = {
-  headlineMedium: { ...typography.headlineMedium, fontFamily: fonts.brand, fontWeight: "500" },
-  titleLarge: { ...typography.titleLarge, fontFamily: fonts.brand, fontWeight: "500" },
+  headlineMedium: { ...typography.headlineMedium, fontFamily: fonts.brand, fontWeight: "normal" },
+  titleLarge: { ...typography.titleLarge, fontFamily: fonts.brand, fontWeight: "normal" },
   titleMedium: { ...typography.titleMedium, fontWeight: "700" },
   titleSmall: { ...typography.titleSmall, fontWeight: "700" },
   bodyLarge: { ...typography.bodyLarge, fontWeight: "500" },
