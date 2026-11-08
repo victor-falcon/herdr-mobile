@@ -41,6 +41,8 @@ export function Button({
   loading,
   disabled,
   style,
+  tint,
+  accessibilityLabel,
 }: {
   title: string;
   onPress: () => void;
@@ -50,10 +52,14 @@ export function Button({
   loading?: boolean;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** Overrides the variant's container and content colors, e.g. an error-colored text button. */
+  tint?: { fill: string; ink: string };
+  /** What a screen reader says, when the title alone is ambiguous. Defaults to the title. */
+  accessibilityLabel?: string;
 }) {
   const colors = useColors();
   const styles = useStyles();
-  const { fill, ink, outline } = buttonColors(variant, colors);
+  const { fill, ink, outline } = { ...buttonColors(variant, colors), ...tint };
   const height = HEIGHT[size];
   const off = !!(disabled || loading);
   const medium = size === "medium";
@@ -64,7 +70,7 @@ export function Button({
       ink={ink}
       onPress={onPress}
       disabled={off}
-      accessibilityLabel={title}
+      accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{ busy: !!loading }}
       hitSlop={size === "small" ? { top: 4, bottom: 4 } : undefined}
       style={style}
