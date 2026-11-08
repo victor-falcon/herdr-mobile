@@ -1,20 +1,20 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet } from "../../src/fleet-store";
 import { useSettings } from "../../src/settings";
 import { TerminalInput, type TerminalInputHandle } from "../../src/terminal/TerminalInput";
 import { TerminalView, type TerminalHandle, type TerminalMode } from "../../src/terminal/TerminalView";
+import { IconButton } from "../../src/ui/IconButton";
 import { SessionActions } from "../../src/ui/SessionActions";
 import { SheetAction } from "../../src/ui/Sheet";
+import { TopAppBar } from "../../src/ui/TopAppBar";
 import { useKeyboardHeight } from "../../src/ui/keyboard";
-import { agentTitle } from "../../src/ui/session-display";
-import { makeStyles, space, useColors } from "../../src/ui/theme";
+import { agentTitle, shortPath } from "../../src/ui/session-display";
+import { makeStyles, space, typography } from "../../src/ui/theme";
 
 export default function SessionScreen() {
-  const colors = useColors();
   const styles = useStyles();
   const { key } = useLocalSearchParams<{ key: string }>();
   useFleet();
@@ -34,7 +34,11 @@ export default function SessionScreen() {
 
   const seen = useRef(false);
   const title = useRef("Session");
-  if (session) title.current = agentTitle(session);
+  const where = useRef("");
+  if (session) {
+    title.current = agentTitle(session);
+    where.current = `${session.machine} · ${shortPath(session.terminal.foreground?.cwd || session.terminal.cwd)}`;
+  }
   const reachable = !!fleet.targetOf(key);
   useEffect(() => {
     if (session) seen.current = true;
@@ -47,15 +51,13 @@ export default function SessionScreen() {
 
   return (
     <View style={[styles.screen, { paddingBottom: keyboard }]}>
-      <Stack.Screen
-        options={{
-          title: title.current,
-          headerRight: () => (
-            <Pressable hitSlop={10} onPress={() => setActions(true)} disabled={!session} accessibilityRole="button" accessibilityLabel="Session actions">
-              <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
-            </Pressable>
-          ),
-        }}
+      <Stack.Screen options={{ headerShown: false }} />
+      <TopAppBar
+        title={title.current}
+        subtitle={where.current || undefined}
+        onBack={back}
+        titleStyle={styles.title}
+        actions={<IconButton icon="ellipsis-vertical" label="Session actions" onPress={() => setActions(true)} disabled={!session} />}
       />
       {t && route ? (
         <TerminalView
@@ -83,6 +85,7 @@ export default function SessionScreen() {
       <SessionActions session={actions ? session ?? null : null} onClose={() => setActions(false)}>
         <SheetAction
           label={view === "fit" ? "Desktop size" : "Phone size"}
+          icon={view === "fit" ? "desktop-outline" : "phone-portrait-outline"}
           detail={view === "fit" ? "Its own size, scaled down; pinch to zoom" : "Reflow it to fit the phone"}
           onPress={() => {
             setActions(false);
@@ -96,6 +99,8 @@ export default function SessionScreen() {
 
 const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
-  gone: { flex: 1, alignItems: "center", justifyContent: "center" },
-  muted: { color: colors.muted },
+  // The design's small bar title: titleLarge in Roboto Flex at 20/26, so a long agent title fits.
+  title: { fontSize: 20, lineHeight: 26 },
+  gone: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
+  muted: { ...typography.bodyLarge, color: colors.onSurfaceVariant, textAlign: "center" },
 }));

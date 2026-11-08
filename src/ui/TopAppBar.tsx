@@ -2,7 +2,7 @@
 // <Stack.Screen options={{ headerShown: false }} />.
 import { router } from "expo-router";
 import type { ReactNode } from "react";
-import { Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconButton } from "./IconButton";
 import { emphasized, makeStyles, space, typography } from "./theme";
@@ -52,6 +52,7 @@ export function TopAppBar({
   onBack = goBack,
   actions,
   style,
+  titleStyle,
 }: {
   title: string;
   subtitle?: string;
@@ -59,6 +60,8 @@ export function TopAppBar({
   onBack?: () => void;
   actions?: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** Adjusts the title, e.g. a smaller size for a long one. */
+  titleStyle?: StyleProp<TextStyle>;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -67,7 +70,7 @@ export function TopAppBar({
       <View style={[styles.row, styles.small]}>
         {back ? <IconButton icon="arrow-back" label="Back" onPress={onBack} /> : null}
         <View style={[styles.flex, !back && styles.noBack]}>
-          <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
+          <Text style={[styles.title, titleStyle]} numberOfLines={1} accessibilityRole="header">
             {title}
           </Text>
           {subtitle ? (

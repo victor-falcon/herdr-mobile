@@ -5,12 +5,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type RefObject } from "react";
-import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Keyboard, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { utf8Encode } from "../hc/bytes";
 import { HcError, type HcConnection } from "../hc/connection";
 import { updateSettings, useSettings } from "../settings";
-import { makeStyles, fonts, radius, space, useColors } from "../ui/theme";
+import type { IconName } from "../ui/icons";
+import { corners, MorphPressable, type Corners } from "../ui/press";
+import { fonts, makeStyles, shape, space, typography, useColors } from "../ui/theme";
 import { CLUSTER_START, KEY_ROWS, keyBytes, type BarKey } from "./keys";
 import type { TerminalHandle } from "./TerminalView";
 import { enterSends, SEND_DELAY_MS, withoutTypedNewline, type Change } from "./composer";
@@ -38,6 +40,7 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const capture = useRef<TextInput>(null);
+  const composer = useRef<TextInput>(null);
   const mirror = useRef("");
   const latest = useRef("");
   const lastChange = useRef<Change | null>(null);
@@ -186,47 +189,54 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
 
   const bottom = keyboardHeight ? 0 : insets.bottom;
 
+  const slot = (k: BarKey, shapeOf?: Corners) => (
+    <BarSlot
+      key={k.key}
+      slot={k}
+      shapeOf={shapeOf}
+      message={message}
+      ctrl={ctrl}
+      keyboardOpen={keyboardHeight > 0}
+      onMode={() => setMode(message ? "direct" : "message")}
+      onCtrl={() => setCtrl((c) => !c)}
+      onKeyboard={toggleKeyboard}
+      onKey={pressKey}
+    />
+  );
+
   return (
-    <>
-      <View style={styles.keybar}>
+    <View style={styles.panel}>
+      <View style={styles.keys}>
         {KEY_ROWS.map((row, r) => (
           <View key={r} style={styles.keyRow}>
-            {row.map((k, i) => (
-              <BarSlot
-                key={k.key}
-                slot={k}
-                style={i === CLUSTER_START ? styles.clusterStart : undefined}
-                message={message}
-                ctrl={ctrl}
-                keyboardOpen={keyboardHeight > 0}
-                onMode={() => setMode(message ? "direct" : "message")}
-                onCtrl={() => setCtrl((c) => !c)}
-                onKeyboard={toggleKeyboard}
-                onKey={pressKey}
-              />
-            ))}
+            {row.slice(0, CLUSTER_START).map((k) => slot(k))}
+            <View style={styles.cluster}>
+              {row.slice(CLUSTER_START).map((k, i, cluster) => slot(k, clusterCorners(r, i, cluster.length, KEY_ROWS.length)))}
+            </View>
           </View>
         ))}
       </View>
       {message ? (
-        <View style={[styles.composer, { paddingBottom: Math.max(bottom, space.sm) }]}>
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={onMessageChange}
-            placeholder="Message"
-            placeholderTextColor={colors.muted}
-            autoCorrect
-            spellCheck
-            multiline
-            submitBehavior="newline"
-          />
-          <Pressable style={[styles.send, (!text.trim() || sending) && styles.off]} disabled={!text.trim() || sending} onPress={() => void send(text)}>
-            <Text style={styles.sendText}>{sending ? "…" : "Send"}</Text>
+        <View style={[styles.composer, { paddingBottom: bottom }]}>
+          {/* The pill holds the padding (Android drops a TextInput's own) and focuses the field anywhere in it. */}
+          <Pressable style={styles.field} onPress={() => composer.current?.focus()} accessible={false}>
+            <TextInput
+              ref={composer}
+              style={styles.input}
+              value={text}
+              onChangeText={onMessageChange}
+              placeholder="Message"
+              placeholderTextColor={colors.onSurfaceVariant}
+              autoCorrect
+              spellCheck
+              multiline
+              submitBehavior="newline"
+            />
           </Pressable>
+          <SendButton busy={sending} disabled={!text.trim()} onPress={() => void send(text)} />
         </View>
       ) : (
-        <View style={{ height: Math.max(bottom, keyboardHeight ? 0 : space.xs) }}>
+        <View style={{ height: bottom }}>
           <TextInput
             ref={capture}
             style={styles.capture}
@@ -246,11 +256,11 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
           />
         </View>
       )}
-    </>
+    </View>
   );
 });
 
-const ICONS: Partial<Record<string, keyof typeof Ionicons.glyphMap>> = {
+const ICONS: Partial<Record<string, IconName>> = {
   paste: "clipboard-outline",
   enter: "return-down-back",
   up: "arrow-up",
@@ -259,10 +269,24 @@ const ICONS: Partial<Record<string, keyof typeof Ionicons.glyphMap>> = {
   right: "arrow-forward",
 };
 
+/**
+ * The arrow cluster is one connected group over two rows: tight inner corners,
+ * and the group's own four outer corners on the keys at its corners. The
+ * shared segmentCorners joins a single row, so it can't say this.
+ */
+function clusterCorners(row: number, index: number, count: number, rows: number): Corners {
+  const [tl, tr, br, bl] = corners(CLUSTER_INNER);
+  const top = row === 0;
+  const bottom = row === rows - 1;
+  const left = index === 0;
+  const right = index === count - 1;
+  return [top && left ? CLUSTER_OUTER : tl, top && right ? CLUSTER_OUTER : tr, bottom && right ? CLUSTER_OUTER : br, bottom && left ? CLUSTER_OUTER : bl];
+}
+
 /** One slot of the key bar: the bar's own controls, or a key it sends. */
-function BarSlot({ slot, style, message, ctrl, keyboardOpen, onMode, onCtrl, onKeyboard, onKey }: {
+function BarSlot({ slot, shapeOf, message, ctrl, keyboardOpen, onMode, onCtrl, onKeyboard, onKey }: {
   slot: BarKey;
-  style?: object;
+  shapeOf?: Corners;
   message: boolean;
   ctrl: boolean;
   keyboardOpen: boolean;
@@ -273,72 +297,118 @@ function BarSlot({ slot, style, message, ctrl, keyboardOpen, onMode, onCtrl, onK
 }) {
   switch (slot.key) {
     case "mode":
-      return <Key style={style} icon={message ? "terminal-outline" : "chatbox-outline"} accessibilityLabel={message ? "Type directly" : "Write a message"} onPress={onMode} />;
+      return <Key icon={message ? "terminal-outline" : "chatbox-outline"} accessibilityLabel={message ? "Type directly" : "Write a message"} onPress={onMode} />;
     case "ctrl":
-      return <Key style={style} label="ctrl" active={ctrl} onPress={onCtrl} />;
+      return <Key label="ctrl" active={ctrl} onPress={onCtrl} />;
     case "keyboard":
       // Always in its slot so no key moves; the composer has its own keyboard.
-      return <Key style={style} icon={keyboardOpen ? "chevron-down-outline" : "keypad-outline"} accessibilityLabel={keyboardOpen ? "Hide keyboard" : "Open keyboard"} disabled={message} onPress={onKeyboard} />;
+      return <Key icon={keyboardOpen ? "chevron-down-outline" : "keypad-outline"} accessibilityLabel={keyboardOpen ? "Hide keyboard" : "Open keyboard"} disabled={message} onPress={onKeyboard} />;
     default: {
       const icon = ICONS[slot.key];
       const name = slot.key === "paste" ? "Paste" : slot.label;
-      return <Key style={style} label={slot.label} icon={icon} accessibilityLabel={icon ? name : undefined} tonal={slot.arrow} onPress={() => onKey(slot.key)} />;
+      return <Key shapeOf={shapeOf} label={slot.label} icon={icon} accessibilityLabel={icon ? name : undefined} tonal={slot.arrow} onPress={() => onKey(slot.key)} />;
     }
   }
 }
 
-/** A Material 3 button for the key bar: tonal for arrows, filled when a toggle is on. */
-function Key({ label = "", icon, onPress, active, tonal, disabled, style, accessibilityLabel }: {
+const KEY_RADIUS = 14;
+const KEY_ON_RADIUS = shape.small;
+const CLUSTER_OUTER = shape.large;
+const CLUSTER_INNER = 6;
+const CLUSTER_GAP = 4;
+/** Keys, the composer field and the send button are all this tall. */
+const CONTROL = 48;
+
+/** Pressed, a key's corners spring to about half: Material 3 Expressive's press morph. */
+function pressedCorners([tl, tr, br, bl]: Corners): Corners {
+  const half = (r: number) => Math.max(3, Math.round(r / 2));
+  return [half(tl), half(tr), half(br), half(bl)];
+}
+
+/** A key of the bar: plain, tonal for arrows, primary and squared off when a toggle is on. */
+function Key({ label = "", icon, onPress, active, tonal, disabled, shapeOf, accessibilityLabel }: {
   label?: string;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: IconName;
   onPress: () => void;
   active?: boolean;
   tonal?: boolean;
   disabled?: boolean;
-  style?: object;
+  /** Corner radii, for keys in the arrow cluster. */
+  shapeOf?: Corners;
   accessibilityLabel?: string;
 }) {
   const colors = useColors();
   const styles = useStyles();
-  const ink = active ? colors.onAccent : tonal ? colors.onTonal : colors.text;
+  const ink = active ? colors.onPrimary : tonal ? colors.onSecondaryContainer : colors.onSurface;
+  const fill = active ? colors.primary : tonal ? colors.secondaryContainer : colors.surfaceContainerHighest;
+  const rest = shapeOf ?? corners(active ? KEY_ON_RADIUS : KEY_RADIUS);
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ selected: !!active, disabled: !!disabled }}
-      disabled={disabled}
-      style={({ pressed }) => [styles.key, tonal && styles.keyTonal, active && styles.keyActive, pressed && styles.keyPressed, disabled && styles.keyDisabled, style]}
+    <MorphPressable
+      rest={rest}
+      pressed={pressedCorners(rest)}
+      ink={ink}
       onPress={onPress}
+      disabled={disabled}
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ selected: !!active }}
+      style={styles.key}
+      surface={[styles.keySurface, { backgroundColor: fill, opacity: disabled ? 0.38 : 1 }]}
     >
-      {({ pressed }) => (
-        <>
-          {pressed && <View style={[styles.stateLayer, { backgroundColor: ink }]} />}
-          {icon ? <Ionicons name={icon} size={20} color={ink} /> : <Text style={[styles.keyText, { color: ink }, /^\d$/.test(label) && styles.keyDigit]}>{label}</Text>}
-        </>
-      )}
-    </Pressable>
+      {icon ? <Ionicons name={icon} size={20} color={ink} /> : <Text style={[styles.keyText, { color: ink }, /^\d$/.test(label) && styles.keyDigit]}>{label}</Text>}
+    </MorphPressable>
+  );
+}
+
+/** The composer's 48px filled round send button, with a spinner while it sends. */
+function SendButton({ busy, disabled, onPress }: { busy: boolean; disabled: boolean; onPress: () => void }) {
+  const colors = useColors();
+  const styles = useStyles();
+  return (
+    <MorphPressable
+      rest={corners(CONTROL / 2)}
+      pressed={corners(shape.medium)}
+      ink={colors.onPrimary}
+      onPress={onPress}
+      disabled={disabled || busy}
+      accessibilityLabel="Send"
+      accessibilityState={{ busy }}
+      surface={[styles.send, { opacity: disabled && !busy ? 0.38 : 1 }]}
+    >
+      {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Ionicons name="arrow-up" size={24} color={colors.onPrimary} />}
+    </MorphPressable>
   );
 }
 
 const KEY_GAP = 6;
 
 const useStyles = makeStyles((colors) => ({
-  keybar: { padding: space.sm, gap: KEY_GAP, backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // Docked under the terminal, never over it.
+  panel: {
+    backgroundColor: colors.surfaceContainer,
+    borderTopLeftRadius: shape.extraLarge,
+    borderTopRightRadius: shape.extraLarge,
+    paddingTop: space.md,
+    paddingHorizontal: space.sm,
+    paddingBottom: space.sm,
+  },
+  keys: { gap: KEY_GAP },
   keyRow: { flexDirection: "row", gap: KEY_GAP },
-  clusterStart: { marginLeft: KEY_GAP },
-  key: { flex: 1, minWidth: 0, height: 44, borderRadius: 12, overflow: "hidden", backgroundColor: colors.surfaceHigh, alignItems: "center", justifyContent: "center" },
-  keyTonal: { backgroundColor: colors.tonal },
-  keyActive: { backgroundColor: colors.accent },
-  // Material 3 Expressive: a pressed button squares off a little.
-  keyPressed: { borderRadius: radius.md - 2 },
-  keyDisabled: { opacity: 0.38 },
-  stateLayer: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, opacity: 0.12 },
-  keyText: { fontSize: 13, fontFamily: fonts.mono, fontWeight: "500" },
+  cluster: { flex: 3, minWidth: 0, flexDirection: "row", gap: CLUSTER_GAP, marginLeft: KEY_GAP },
+  key: { flex: 1, minWidth: 0 },
+  keySurface: { height: CONTROL },
+  keyText: { fontSize: 13, fontFamily: fonts.monoMedium, fontWeight: "normal" },
   keyDigit: { fontSize: 15 },
-  composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: space.sm, paddingTop: space.sm, backgroundColor: colors.surface },
-  input: { flex: 1, maxHeight: 120, color: colors.text, backgroundColor: colors.bg, borderRadius: 18, paddingHorizontal: 14, paddingVertical: space.sm, fontSize: 15 },
-  send: { backgroundColor: colors.accent, borderRadius: 18, paddingHorizontal: space.lg, height: 36, justifyContent: "center" },
-  sendText: { color: colors.onAccent, fontWeight: "700" },
-  off: { opacity: 0.4 },
+  composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingTop: space.md },
+  field: {
+    flex: 1,
+    minHeight: CONTROL,
+    justifyContent: "center",
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: CONTROL / 2,
+    paddingHorizontal: 20,
+    paddingVertical: space.md,
+  },
+  input: { ...typography.bodyLarge, maxHeight: 96, padding: 0, color: colors.onSurface },
+  send: { width: CONTROL, height: CONTROL, backgroundColor: colors.primary },
   capture: { position: "absolute", left: 0, top: 0, width: 1, height: 1, opacity: 0, color: "transparent" },
 }));
