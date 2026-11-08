@@ -9,7 +9,7 @@ import { Row, Section } from "../src/ui/Group";
 import { parseProjectDirs } from "../src/project-dirs";
 import { TextField } from "../src/ui/TextField";
 import { makeStyles, radius, space, useColors } from "../src/ui/theme";
-import { applyUpdate, currentUpdate, fetchUpdate, updatesEnabled } from "../src/updates";
+import { checkForUpdate, currentUpdate, installUpdate, updatesEnabled } from "../src/updates";
 
 export default function SettingsScreen() {
   const styles = useStyles();
@@ -132,18 +132,23 @@ function AgentsField({ agents }: { agents: Agent[] }) {
 }
 
 function UpdateButton() {
-  const [state, setState] = useState<"idle" | "checking" | "ready" | "latest" | "failed">("idle");
-  const label = { idle: "Check for updates", checking: "Checking…", ready: "Restart to update", latest: "Up to date", failed: "Couldn't check" }[state];
+  const [state, setState] = useState<"idle" | "checking" | "downloading" | "latest" | "failed">("idle");
+  const label = { idle: "Check for updates", checking: "Checking…", downloading: "Downloading…", latest: "Up to date", failed: "Couldn't update" }[state];
+  // Finds the newest build and, when it is newer, downloads it into Android's installer.
   const onPress = async () => {
-    if (state === "ready") return void applyUpdate();
     setState("checking");
     try {
-      setState((await fetchUpdate()) ? "ready" : "latest");
+      const release = await checkForUpdate();
+      if (!release) return setState("latest");
+      setState("downloading");
+      await installUpdate(release);
+      setState("idle");
     } catch {
       setState("failed");
     }
   };
-  return <Small label={label} active={state === "ready"} onPress={() => void onPress()} disabled={state === "checking"} />;
+  const busy = state === "checking" || state === "downloading";
+  return <Small label={label} active={busy} onPress={() => void onPress()} disabled={busy} />;
 }
 
 function Small({ label, onPress, active, disabled }: { label: string; onPress: () => void; active?: boolean; disabled?: boolean }) {

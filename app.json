@@ -22,10 +22,7 @@
         "POST_NOTIFICATIONS",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_SPECIAL_USE",
-        "INTERNET",
-        "POST_NOTIFICATIONS",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_SPECIAL_USE"
+        "REQUEST_INSTALL_PACKAGES"
       ],
       "versionCode": 2,
       "adaptiveIcon": {
@@ -38,6 +35,7 @@
     "plugins": [
       "expo-router",
       "./plugins/with-ios-scene.js",
+      "./plugins/with-release-signing.js",
       [
         "expo-build-properties",
         {
@@ -67,10 +65,7 @@
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/0afbcfa9-0226-496f-a345-cd321643342c",
-      "requestHeaders": {
-        "expo-channel-name": "preview"
-      }
+      "enabled": false
     },
     "runtimeVersion": {
       "policy": "fingerprint"

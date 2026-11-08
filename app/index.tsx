@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link, Stack, router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet, useMachines } from "../src/fleet-store";
 import type { Session } from "../src/hc/fleet";
@@ -13,7 +13,7 @@ import { NewSessionSheet } from "../src/ui/NewSessionSheet";
 import { ProjectSheet } from "../src/ui/ProjectSheet";
 import { SpaceList } from "../src/ui/SpaceList";
 import { makeStyles, radius, space, useColors } from "../src/ui/theme";
-import { applyUpdate, useUpdates } from "../src/updates";
+import { installUpdate, useAvailableUpdate } from "../src/updates";
 
 export default function Agents() {
   const colors = useColors();
@@ -23,7 +23,7 @@ export default function Agents() {
   const [picking, setPicking] = useState(false);
   const [startIn, setStartIn] = useState<Space | null>(null);
   const insets = useSafeAreaInsets();
-  const { isUpdatePending } = useUpdates();
+  const update = useAvailableUpdate();
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 15_000);
@@ -63,10 +63,14 @@ export default function Agents() {
           </View>
         )}
 
-        {isUpdatePending && (
-          <Pressable style={[styles.banner, styles.update]} onPress={() => void applyUpdate()} accessibilityRole="button">
-            <Text style={styles.bannerText}>A new version is ready</Text>
-            <Text style={styles.updateAction}>Restart</Text>
+        {update && (
+          <Pressable
+            style={[styles.banner, styles.update]}
+            onPress={() => installUpdate(update).catch((e) => Alert.alert("Could not update", e instanceof Error ? e.message : String(e)))}
+            accessibilityRole="button"
+          >
+            <Text style={styles.bannerText}>{update.title} is available</Text>
+            <Text style={styles.updateAction}>Install</Text>
           </Pressable>
         )}
 
