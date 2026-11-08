@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { StyleProp, ViewStyle } from "react-native";
-import type { IconName } from "./Button";
+import type { IconName } from "./icons";
 import { corners, MorphPressable } from "./press";
 import { shape, useColors } from "./theme";
 

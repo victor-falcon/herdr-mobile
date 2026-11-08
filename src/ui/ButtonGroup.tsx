@@ -1,45 +1,26 @@
 // Material 3 Expressive's connected button group: segments 2px apart, round on
 // the outside (20), tight on the inside (6); a selected segment becomes fully round.
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { buttonColors, type ButtonVariant, type IconName } from "./Button";
-import { corners, MorphPressable, type Corners } from "./press";
+import { buttonColors, type ButtonVariant } from "./Button";
+import type { IconName } from "./icons";
+import { corners, MorphPressable, segmentCorners, withPositions, type Corners, type Position } from "./press";
 import { fonts, makeStyles, shape, typography, useColors } from "./theme";
 
 const OUTER = shape.largeIncreased;
 const INNER = 6;
 
-export type Position = "first" | "middle" | "last" | "only";
-
-function groupCorners(position: Position): Corners {
-  switch (position) {
-    case "first":
-      return [OUTER, INNER, INNER, OUTER];
-    case "middle":
-      return corners(INNER);
-    case "last":
-      return [INNER, OUTER, OUTER, INNER];
-    case "only":
-      return corners(OUTER);
-  }
-}
-
-type Segment = { position?: Position };
-
 /** Lays its segments out in a row and tells each where it sits. */
 export function ButtonGroup({ children, gap = 2, style, accessibilityLabel }: { children: ReactNode; gap?: number; style?: StyleProp<ViewStyle>; accessibilityLabel?: string }) {
-  const items = Children.toArray(children).filter(isValidElement) as ReactElement<Segment>[];
   return (
     <View style={[{ flexDirection: "row", alignItems: "center", gap }, style]} accessibilityLabel={accessibilityLabel}>
-      {items.map((child, i) =>
-        cloneElement(child, { position: child.props.position ?? (items.length === 1 ? "only" : i === 0 ? "first" : i === items.length - 1 ? "last" : "middle") }),
-      )}
+      {withPositions(children)}
     </View>
   );
 }
 
-/** A segment of a ButtonGroup. `corners` overrides its shape, e.g. for a grid of arrow keys. */
+/** A segment of a ButtonGroup. `corners` overrides its shape, e.g. for a grid of arrow keys; a selected segment is fully round regardless. */
 export function GroupButton({
   label,
   icon,
@@ -72,7 +53,7 @@ export function GroupButton({
   const colors = useColors();
   const styles = useStyles();
   const { fill, ink, outline } = buttonColors(selected ? "filled" : variant, colors);
-  const rest = selected ? corners(height / 2) : (shapeOverride ?? groupCorners(position));
+  const rest = selected ? corners(height / 2) : (shapeOverride ?? segmentCorners(position, OUTER, INNER));
   return (
     <MorphPressable
       rest={rest}
@@ -83,6 +64,7 @@ export function GroupButton({
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={selected === undefined ? undefined : { checked: selected }}
       style={flex ? { flex } : undefined}
+      hitSlop={height < 48 ? { top: (48 - height) / 2, bottom: (48 - height) / 2 } : undefined}
       surface={[styles.segment, { height, width, backgroundColor: fill }, outline ? { borderWidth: 1, borderColor: outline } : null]}
     >
       {icon ? <Ionicons name={icon} size={20} color={ink} /> : null}
@@ -94,7 +76,7 @@ export function GroupButton({
 /** A value shown between a group's buttons, like the text size between − and +. */
 export function GroupValue({ children, height = 40, width = 44, position = "middle" }: { children: ReactNode; height?: number; width?: number; position?: Position }) {
   const styles = useStyles();
-  const [tl, tr, br, bl] = groupCorners(position);
+  const [tl, tr, br, bl] = segmentCorners(position, OUTER, INNER);
   return (
     <View style={[styles.value, { height, width, borderTopLeftRadius: tl, borderTopRightRadius: tr, borderBottomRightRadius: br, borderBottomLeftRadius: bl }]}>
       <Text style={styles.valueText}>{children}</Text>

@@ -3,7 +3,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Children, type ReactNode } from "react";
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import type { IconName } from "./Button";
+import type { IconName } from "./icons";
 import { emphasized, makeStyles, shape, space, typography, useColors } from "./theme";
 
 export function Section({ title, children, style }: { title?: string; children: ReactNode; style?: StyleProp<ViewStyle> }) {

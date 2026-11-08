@@ -2,7 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ReactNode } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import type { Session } from "../hc/fleet";
-import type { IconName } from "./Button";
+import type { IconName } from "./icons";
 import { LoadingIndicator } from "./Shapes";
 import { useColors, type Colors } from "./theme";
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Text, View, type StyleProp, type ViewStyle } from "react-native";
-import type { IconName } from "./Button";
+import type { IconName } from "./icons";
 import { ShapeBadge } from "./Shapes";
 import { emphasized, makeStyles, typography } from "./theme";
 

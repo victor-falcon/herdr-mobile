@@ -1,11 +1,11 @@
 // Material 3 Expressive buttons: round at rest, squarer while pressed.
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ComponentProps } from "react";
 import { ActivityIndicator, Text, type StyleProp, type ViewStyle } from "react-native";
+import type { IconName } from "./icons";
 import { corners, MorphPressable } from "./press";
 import { makeStyles, shape, typography, useColors, type Colors } from "./theme";
 
-export type IconName = ComponentProps<typeof Ionicons>["name"];
+export type { IconName } from "./icons";
 
 /** filled, tonal, outlined and text are Material's; primary, secondary and danger are the app's older names. */
 export type ButtonVariant = "filled" | "tonal" | "outlined" | "text" | "primary" | "secondary" | "danger";
@@ -66,6 +66,7 @@ export function Button({
       disabled={off}
       accessibilityLabel={title}
       accessibilityState={{ busy: !!loading }}
+      hitSlop={size === "small" ? { top: 4, bottom: 4 } : undefined}
       style={style}
       surface={[
         styles.base,
@@ -88,7 +89,7 @@ export function Button({
   );
 }
 
-/** A toggle: tonal when off, primary and squarer when on. */
+/** A toggle, like the terminal's ctrl key: surfaceContainerHighest when off, primary and squarer when on. */
 export function ToggleButton({
   label,
   icon,

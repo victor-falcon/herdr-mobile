@@ -1,8 +1,8 @@
 // Material 3's filled text field: surfaceContainerHigh, rounded on top, a 1px
 // indicator below that turns 2px primary while focused, and an optional label
 // that floats above the text once there is some (or while typing).
-import { forwardRef, useEffect, useRef, useState } from "react";
-import { Animated, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Animated, Pressable, TextInput, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
 import { makeStyles, shape, typography, useColors } from "./theme";
 
 type Props = Omit<TextInputProps, "style"> & {
@@ -21,6 +21,9 @@ type Props = Omit<TextInputProps, "style"> & {
 export const TextField = forwardRef<TextInput, Props>(function TextField({ label, style, inputStyle, inset: _inset, invalid, onFocus, onBlur, onChangeText, placeholder, ...props }, ref) {
   const colors = useColors();
   const styles = useStyles();
+  // The whole field focuses the input, not just the line of text in it.
+  const input = useRef<TextInput>(null);
+  useImperativeHandle(ref, () => input.current as TextInput);
   const [focused, setFocused] = useState(false);
   const [typed, setTyped] = useState(!!props.defaultValue);
   const filled = props.value !== undefined ? props.value !== "" : typed;
@@ -35,7 +38,12 @@ export const TextField = forwardRef<TextInput, Props>(function TextField({ label
   const indicator = invalid ? colors.error : focused ? colors.primary : colors.onSurfaceVariant;
   const labelColor = invalid ? colors.error : focused ? colors.primary : colors.onSurfaceVariant;
   return (
-    <View style={[styles.field, { borderBottomColor: indicator, borderBottomWidth: focused || invalid ? 2 : 1 }, label ? styles.labelled : null, style]}>
+    <Pressable
+      accessible={false}
+      onPress={() => input.current?.focus()}
+      disabled={props.editable === false}
+      style={[styles.field, { borderBottomColor: indicator, borderBottomWidth: focused || invalid ? 2 : 1 }, label ? styles.labelled : null, style]}
+    >
       {label ? (
         <Animated.View
           pointerEvents="none"
@@ -50,7 +58,7 @@ export const TextField = forwardRef<TextInput, Props>(function TextField({ label
         </Animated.View>
       ) : null}
       <TextInput
-        ref={ref}
+        ref={input}
         autoCapitalize="none"
         autoCorrect
         spellCheck
@@ -73,7 +81,7 @@ export const TextField = forwardRef<TextInput, Props>(function TextField({ label
         }}
         style={[styles.input, inputStyle]}
       />
-    </View>
+    </Pressable>
   );
 });
 

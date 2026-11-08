@@ -1,13 +1,39 @@
 // Material 3 Expressive's shape morph: a control's corners spring to a squarer
 // shape while it is pressed (or when it changes state) and back when released.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Pressable, StyleSheet, type AccessibilityRole, type AccessibilityState, type StyleProp, type ViewStyle } from "react-native";
+import { Children, cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { Animated, Pressable, StyleSheet, type AccessibilityRole, type Insets, type AccessibilityState, type StyleProp, type ViewStyle } from "react-native";
 
 /** Corner radii, clockwise from the top left. */
 export type Corners = readonly [topLeft: number, topRight: number, bottomRight: number, bottomLeft: number];
 
 export function corners(all: number): Corners {
   return [all, all, all, all];
+}
+
+/** Where a segment sits in a connected group. */
+export type Position = "first" | "middle" | "last" | "only";
+
+/** A connected segment's corners: `outer` on the group's ends, `inner` where it meets its neighbours. */
+export function segmentCorners(position: Position, outer: number, inner: number): Corners {
+  switch (position) {
+    case "first":
+      return [outer, inner, inner, outer];
+    case "middle":
+      return corners(inner);
+    case "last":
+      return [inner, outer, outer, inner];
+    case "only":
+      return corners(outer);
+  }
+}
+
+/** Tells each element of a connected group where it sits, unless it says so itself. */
+export function withPositions(children: ReactNode): ReactElement[] {
+  const items = Children.toArray(children).filter(isValidElement) as ReactElement<{ position?: Position }>[];
+  const last = items.length - 1;
+  return items.map((child, i) =>
+    cloneElement(child, { position: child.props.position ?? (last === 0 ? "only" : i === 0 ? "first" : i === last ? "last" : "middle") }),
+  );
 }
 
 const SPRING = { useNativeDriver: false, speed: 40, bounciness: 8 } as const;
@@ -64,6 +90,7 @@ export function MorphPressable({
   accessibilityRole = "button",
   accessibilityLabel,
   accessibilityState,
+  hitSlop,
   children,
 }: {
   rest: Corners;
@@ -78,6 +105,8 @@ export function MorphPressable({
   accessibilityRole?: AccessibilityRole;
   accessibilityLabel?: string;
   accessibilityState?: AccessibilityState;
+  /** Extra touch area around a control smaller than 48dp. */
+  hitSlop?: Insets;
   children: ReactNode;
 }) {
   const morph = useShapeMorph(rest, pressed);
@@ -90,6 +119,7 @@ export function MorphPressable({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled, ...accessibilityState }}
+      hitSlop={hitSlop}
       style={style}
     >
       <Animated.View style={[styles.surface, surface, morph.style]}>

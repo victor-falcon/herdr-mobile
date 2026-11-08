@@ -3,7 +3,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import type { IconName } from "./Button";
+import type { IconName } from "./icons";
 import { useColors } from "./theme";
 
 /**
@@ -34,7 +34,7 @@ export function Cookie({ size, color, lobes = 8 }: { size: number; color: string
 }
 
 /** Material's loading indicator: an 8-lobed cookie that turns and breathes. */
-export function LoadingIndicator({ size = 24, color }: { size?: number; color?: string }) {
+export function LoadingIndicator({ size = 24, color, label = "Working" }: { size?: number; color?: string; label?: string }) {
   const colors = useColors();
   const turn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -45,7 +45,7 @@ export function LoadingIndicator({ size = 24, color }: { size?: number; color?: 
   const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
   const scale = turn.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: [1, 0.86, 1, 0.86, 1] });
   return (
-    <Animated.View accessibilityRole="progressbar" accessibilityLabel="Working" style={{ transform: [{ rotate }, { scale }] }}>
+    <Animated.View accessibilityRole="progressbar" accessibilityLabel={label} style={{ transform: [{ rotate }, { scale }] }}>
       <Cookie size={size} color={color ?? colors.primary} lobes={8} />
     </Animated.View>
   );
