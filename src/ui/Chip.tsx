@@ -16,6 +16,5 @@ const useStyles = makeStyles((colors) => ({
     paddingVertical: 2,
     borderRadius: shape.full,
     overflow: "hidden",
-    alignSelf: "flex-start",
   },
 }));
