@@ -5,7 +5,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type RefObject } from "react";
-import { ActivityIndicator, Alert, Keyboard, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Keyboard, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { utf8Encode } from "../hc/bytes";
 import { HcError, type HcConnection } from "../hc/connection";
@@ -40,6 +40,7 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const capture = useRef<TextInput>(null);
+  const composer = useRef<TextInput>(null);
   const mirror = useRef("");
   const latest = useRef("");
   const lastChange = useRef<Change | null>(null);
@@ -217,17 +218,21 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
       </View>
       {message ? (
         <View style={[styles.composer, { paddingBottom: bottom }]}>
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={onMessageChange}
-            placeholder="Message"
-            placeholderTextColor={colors.onSurfaceVariant}
-            autoCorrect
-            spellCheck
-            multiline
-            submitBehavior="newline"
-          />
+          {/* The pill holds the padding (Android drops a TextInput's own) and focuses the field anywhere in it. */}
+          <Pressable style={styles.field} onPress={() => composer.current?.focus()} accessible={false}>
+            <TextInput
+              ref={composer}
+              style={styles.input}
+              value={text}
+              onChangeText={onMessageChange}
+              placeholder="Message"
+              placeholderTextColor={colors.onSurfaceVariant}
+              autoCorrect
+              spellCheck
+              multiline
+              submitBehavior="newline"
+            />
+          </Pressable>
           <SendButton busy={sending} disabled={!text.trim()} onPress={() => void send(text)} />
         </View>
       ) : (
@@ -394,17 +399,16 @@ const useStyles = makeStyles((colors) => ({
   keyText: { fontSize: 13, fontFamily: fonts.monoMedium, fontWeight: "normal" },
   keyDigit: { fontSize: 15 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingTop: space.md },
-  input: {
+  field: {
     flex: 1,
     minHeight: CONTROL,
-    maxHeight: 120,
-    ...typography.bodyLarge,
-    color: colors.onSurface,
+    justifyContent: "center",
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: CONTROL / 2,
     paddingHorizontal: 20,
     paddingVertical: space.md,
   },
+  input: { ...typography.bodyLarge, maxHeight: 96, padding: 0, color: colors.onSurface },
   send: { width: CONTROL, height: CONTROL, backgroundColor: colors.primary },
   capture: { position: "absolute", left: 0, top: 0, width: 1, height: 1, opacity: 0, color: "transparent" },
 }));
