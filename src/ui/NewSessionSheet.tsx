@@ -1,23 +1,35 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import type { Space } from "../spaces";
-import { AGENTS, startAgent, useInstalledAgents } from "./new-session";
+import { useSettings } from "../settings";
+import { programOf, startAgent, useInstalledPrograms } from "./new-session";
 import { Sheet } from "./Sheet";
-import { colors, radius, space as gap } from "./theme";
+import { makeStyles, radius, space as gap, useColors } from "./theme";
+
+// The key for the plain shell row, which no agent command can be.
+const SHELL = "\u0000shell";
 
 export function NewSessionSheet({ space, onClose }: { space: Space | null; onClose: () => void }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const { agents: configured } = useSettings();
   const [starting, setStarting] = useState<string | null>(null);
-  const installed = useInstalledAgents(space?.target);
-  const agents = installed ? AGENTS.filter((a) => installed.includes(a.cmd)) : AGENTS;
+  const installed = useInstalledPrograms(
+    space?.target,
+    configured.map((a) => programOf(a.command)),
+  );
+  const agents = installed ? configured.filter((a) => installed.has(programOf(a.command))) : configured;
+  const rows = [...agents.map((a) => ({ key: a.command, label: a.name || a.command, command: a.command as string | null })), { key: SHELL, label: "Terminal", command: null }];
 
-  const start = async (cmd: string) => {
+  const start = async (key: string, command: string | null) => {
     if (!space) return;
-    setStarting(cmd);
+    setStarting(key);
     try {
-      const key = await startAgent(space, cmd);
+      const session = await startAgent(space, command, command ? installed?.get(programOf(command)) : undefined);
       onClose();
-      router.push({ pathname: "/session/[key]", params: { key } });
+      router.push({ pathname: "/session/[key]", params: { key: session } });
     } catch (e) {
       Alert.alert("Could not start it", e instanceof Error ? e.message : String(e));
     } finally {
@@ -27,36 +39,54 @@ export function NewSessionSheet({ space, onClose }: { space: Space | null; onClo
 
   return (
     <Sheet visible={!!space} onClose={onClose}>
-      <Text style={styles.title} numberOfLines={1}>
-        New agent in <Text style={styles.name}>{space?.name}</Text>
-      </Text>
-      {installed && agents.length === 0 && <Text style={styles.note}>Neither pi nor claude is installed on {space?.target.label}.</Text>}
+      <View style={styles.header}>
+        <Text style={styles.title} numberOfLines={1}>
+          Open a new tab
+        </Text>
+        <Text style={styles.where} numberOfLines={1}>
+          in {space?.name}
+          {space?.target.label ? ` · ${space.target.label}` : ""}
+        </Text>
+      </View>
+      {installed && configured.length > 0 && agents.length === 0 && (
+        <Text style={styles.note}>None of your agents is installed on {space?.target.label}.</Text>
+      )}
       <View style={styles.list}>
-        {agents.map((a) => (
-          <Pressable
-            key={a.cmd}
-            accessibilityRole="button"
-            accessibilityLabel={a.label}
-            disabled={!installed || !!starting}
-            onPress={() => void start(a.cmd)}
-            style={({ pressed }) => [styles.agent, pressed && styles.pressed, (!installed || (starting && starting !== a.cmd)) && styles.off]}
-          >
-            <Text style={styles.label}>{a.label}</Text>
-            {starting === a.cmd && <ActivityIndicator color={colors.text} />}
-          </Pressable>
-        ))}
+        {rows.map((r) => {
+          const waiting = r.command !== null && !installed;
+          return (
+            <Pressable
+              key={r.key}
+              accessibilityRole="button"
+              accessibilityLabel={r.label}
+              disabled={waiting || !!starting}
+              onPress={() => void start(r.key, r.command)}
+              style={({ pressed }) => [styles.agent, pressed && styles.pressed, (waiting || (starting && starting !== r.key)) && styles.off]}
+            >
+              <View style={styles.icon}>
+                <Ionicons name={r.command === null ? "terminal-outline" : "sparkles-outline"} size={18} color={colors.text} />
+              </View>
+              <Text style={styles.label} numberOfLines={1}>
+                {r.label}
+              </Text>
+              {starting === r.key && <ActivityIndicator color={colors.text} />}
+            </Pressable>
+          );
+        })}
       </View>
     </Sheet>
   );
 }
 
-const styles = StyleSheet.create({
-  title: { color: colors.muted, fontSize: 13, marginHorizontal: 14, marginBottom: gap.xs },
-  name: { color: colors.text, fontWeight: "700" },
+const useStyles = makeStyles((colors) => ({
+  header: { marginHorizontal: 14, marginTop: gap.xs, marginBottom: gap.sm },
+  title: { color: colors.text, fontSize: 17, fontWeight: "700" },
+  where: { color: colors.muted, fontSize: 13, marginTop: 2 },
   list: { marginBottom: gap.sm },
-  agent: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 18, borderRadius: radius.md },
+  agent: { flexDirection: "row", alignItems: "center", gap: gap.md, paddingHorizontal: 14, paddingVertical: 14, borderRadius: radius.md },
+  icon: { width: 36, height: 36, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceHigh },
   pressed: { backgroundColor: colors.surfaceHigh },
   off: { opacity: 0.4 },
-  label: { color: colors.text, fontSize: 18, fontWeight: "600" },
+  label: { flex: 1, color: colors.text, fontSize: 16, fontWeight: "600" },
   note: { color: colors.muted, fontSize: 14, padding: 14 },
-});
+}));

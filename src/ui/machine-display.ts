@@ -1,8 +1,8 @@
 // How a machine's connection reads: its color, and what went wrong reaching it.
 import type { LinkView, MachineConfig } from "../hc/fleet";
-import { colors } from "./theme";
+import type { Colors } from "./theme";
 
-export function linkColor(state: LinkView["state"]): string {
+export function linkColor(state: LinkView["state"], colors: Colors): string {
   return state === "connected" ? colors.done : state === "connecting" ? colors.working : colors.blocked;
 }
 

@@ -1,14 +1,18 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import Constants from "expo-constants";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useFleet } from "../src/fleet-store";
-import { updateSettings, useSettings } from "../src/settings";
+import { updateSettings, useSettings, type Agent } from "../src/settings";
 import { Row, Section } from "../src/ui/Group";
-import { colors, radius, space } from "../src/ui/theme";
+import { parseProjectDirs } from "../src/project-dirs";
+import { TextField } from "../src/ui/TextField";
+import { makeStyles, radius, space, useColors } from "../src/ui/theme";
 import { applyUpdate, currentUpdate, fetchUpdate, updatesEnabled } from "../src/updates";
 
 export default function SettingsScreen() {
+  const styles = useStyles();
   const s = useSettings();
   const { links } = useFleet();
   const up = links.filter((l) => l.state === "connected").length;
@@ -42,12 +46,88 @@ export default function SettingsScreen() {
         </Row>
       </Section>
 
+      <Section title="Projects">
+        <ProjectDirsField dirs={s.projectDirs} />
+      </Section>
+
+      <Section title="Agents">
+        <AgentsField agents={s.agents} />
+      </Section>
+
       <Section title="App">
         <Row label={`Herdr Mobile ${Constants.expoConfig?.version ?? ""}`} hint={currentUpdate()}>
           {updatesEnabled && <UpdateButton />}
         </Row>
       </Section>
     </ScrollView>
+  );
+}
+
+function ProjectDirsField({ dirs }: { dirs: string[] }) {
+  const styles = useStyles();
+  const [text, setText] = useState(dirs.join(", "));
+  const save = () => {
+    const next = parseProjectDirs(text);
+    setText(next.join(", "));
+    void updateSettings({ projectDirs: next });
+  };
+  return (
+    <View>
+      <Row label="Project folders" hint="Where Open a project looks on each machine, under your home folder. Separate them with commas; * matches any folder." />
+      <TextField
+        style={styles.field}
+        value={text}
+        onChangeText={setText}
+        onBlur={save}
+        onSubmitEditing={save}
+        placeholder="~/Projects/*, ~/Code/*"
+        autoCorrect={false}
+        spellCheck={false}
+        returnKeyType="done"
+        inset
+      />
+    </View>
+  );
+}
+
+type Draft = Agent & { id: number };
+let draftId = 0;
+
+/** The agents the + sheet offers. Saved as you leave a field; rows without a command are dropped. */
+function AgentsField({ agents }: { agents: Agent[] }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const [drafts, setDrafts] = useState<Draft[]>(() => agents.map((a) => ({ ...a, id: draftId++ })));
+  const save = (next: Draft[]) => {
+    setDrafts(next);
+    void updateSettings({ agents: next.filter((d) => d.command.trim()).map((d) => ({ name: d.name.trim(), command: d.command.trim() })) });
+  };
+  const edit = (id: number, patch: Partial<Agent>) => setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  return (
+    <View>
+      <Row label="Agents" hint="What + offers in a space, besides a plain terminal. The first one is what a new project starts." />
+      {drafts.map((d) => (
+        <View key={d.id} style={styles.agentRow}>
+          <TextField style={styles.agentName} value={d.name} onChangeText={(name) => edit(d.id, { name })} onBlur={() => save(drafts)} placeholder="Name" autoCorrect={false} spellCheck={false} inset />
+          <TextField
+            style={styles.agentCommand}
+            value={d.command}
+            onChangeText={(command) => edit(d.id, { command })}
+            onBlur={() => save(drafts)}
+            placeholder="command --flags"
+            autoCorrect={false}
+            spellCheck={false}
+            inset
+          />
+          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${d.name || d.command || "agent"}`} hitSlop={8} onPress={() => save(drafts.filter((x) => x.id !== d.id))}>
+            <Ionicons name="close" size={20} color={colors.muted} />
+          </Pressable>
+        </View>
+      ))}
+      <View style={styles.agentAdd}>
+        <Small label="Add agent" onPress={() => setDrafts((ds) => [...ds, { id: draftId++, name: "", command: "" }])} />
+      </View>
+    </View>
   );
 }
 
@@ -67,6 +147,7 @@ function UpdateButton() {
 }
 
 function Small({ label, onPress, active, disabled }: { label: string; onPress: () => void; active?: boolean; disabled?: boolean }) {
+  const styles = useStyles();
   return (
     <Pressable accessibilityRole="button" style={({ pressed }) => [styles.small, active && styles.active, pressed && styles.pressed]} onPress={onPress} disabled={disabled}>
       <Text style={[styles.smallText, active && styles.activeText]}>{label}</Text>
@@ -75,6 +156,7 @@ function Small({ label, onPress, active, disabled }: { label: string; onPress: (
 }
 
 function Segmented<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+  const styles = useStyles();
   return (
     <View style={styles.segment} accessibilityRole="radiogroup">
       {options.map(([v, label]) => (
@@ -86,9 +168,14 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: space.lg, paddingBottom: 48, gap: space.xl },
+  agentRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.md, marginBottom: space.sm },
+  agentName: { width: 96 },
+  agentCommand: { flex: 1 },
+  agentAdd: { flexDirection: "row", marginHorizontal: space.md, marginBottom: space.md },
+  field: { marginHorizontal: space.md, marginBottom: space.md },
   value: { color: colors.text, fontSize: 16, minWidth: 28, textAlign: "center", fontVariant: ["tabular-nums"] },
   stepper: { flexDirection: "row", alignItems: "center", gap: space.sm },
   small: { backgroundColor: colors.surfaceHigh, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm - 2 },
@@ -98,4 +185,4 @@ const styles = StyleSheet.create({
   seg: { paddingHorizontal: space.md, paddingVertical: space.sm - 2, borderRadius: radius.sm },
   active: { backgroundColor: colors.accent },
   activeText: { color: colors.onAccent, fontWeight: "700" },
-});
+}));

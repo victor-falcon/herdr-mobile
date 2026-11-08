@@ -1,16 +1,19 @@
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from "react-native";
 import { fleet } from "../fleet-store";
+import { getSettings } from "../settings";
 import type { Space } from "../spaces";
-import { spaceFor, startAgent, startSpace, useProjects, type Project } from "./new-session";
+import { defaultAgentCommand, spaceFor, startAgent, startSpace, useProjects, type Project } from "./new-session";
 import { Sheet } from "./Sheet";
 import { TextField } from "./TextField";
-import { colors, fonts, radius, space as gap } from "./theme";
+import { makeStyles, fonts, radius, space as gap, useColors } from "./theme";
 
 type Item = { heading: string } | { project: Project; open: Space | undefined };
 
 export function ProjectSheet({ visible, spaces, onClose }: { visible: boolean; spaces: Space[]; onClose: () => void }) {
+  const colors = useColors();
+  const styles = useStyles();
   const [query, setQuery] = useState("");
   const [starting, setStarting] = useState<string | null>(null);
   const targets = visible ? fleet.targets() : [];
@@ -38,7 +41,7 @@ export function ProjectSheet({ visible, spaces, onClose }: { visible: boolean; s
   const pick = async (p: Project, open: Space | undefined) => {
     setStarting(p.folder);
     try {
-      const key = open ? await startAgent(open, "pi") : await startSpace(p.target, p.folder);
+      const key = open ? await startAgent(open, defaultAgentCommand()) : await startSpace(p.target, p.folder);
       close();
       router.push({ pathname: "/session/[key]", params: { key } });
     } catch (e) {
@@ -52,7 +55,7 @@ export function ProjectSheet({ visible, spaces, onClose }: { visible: boolean; s
     <Sheet visible={visible} onClose={close}>
       <TextField style={styles.search} value={query} onChangeText={setQuery} placeholder="Open a project" autoCorrect={false} spellCheck={false} inset />
       {loading && <ActivityIndicator style={styles.loading} color={colors.muted} />}
-      {!loading && items.length === 0 && <Text style={styles.note}>{query ? `Nothing matches “${query}”.` : "No projects in ~/workspace."}</Text>}
+      {!loading && items.length === 0 && <Text style={styles.note}>{query ? `Nothing matches “${query}”.` : `No projects in ${getSettings().projectDirs.join(", ") || "any folder"}.`}</Text>}
       <FlatList
         data={items}
         keyboardShouldPersistTaps="handled"
@@ -87,7 +90,7 @@ export function ProjectSheet({ visible, spaces, onClose }: { visible: boolean; s
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   search: { marginHorizontal: gap.xs, marginBottom: gap.sm },
   loading: { marginVertical: gap.xl },
   note: { color: colors.muted, fontSize: 14, padding: 14 },
@@ -99,4 +102,4 @@ const styles = StyleSheet.create({
   owner: { color: colors.muted, fontWeight: "400" },
   open: { borderRadius: radius.sm, backgroundColor: colors.accent + "26", paddingHorizontal: gap.sm - 2, paddingVertical: 2 },
   openText: { color: colors.accent, fontSize: 11, fontWeight: "700" },
-});
+}));

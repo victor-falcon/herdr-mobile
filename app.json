@@ -5,7 +5,7 @@
     "scheme": "herdrmobile",
     "version": "0.2.0",
     "orientation": "default",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#0d1117",
     "ios": {
       "bundleIdentifier": "dev.juanibiapina.herdrmobile",

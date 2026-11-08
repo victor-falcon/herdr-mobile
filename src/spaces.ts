@@ -1,4 +1,10 @@
-import type { HerdrDoc, Session, Target } from "./hc/fleet";
+import type { HerdrDoc, HerdrTab, Session, Target } from "./hc/fleet";
+
+/** One pane of a tab: a terminal (agent or not), or a mod pane the desktop draws. */
+export type TabItem = { kind: "session"; session: Session; sub: boolean } | { kind: "mod"; key: string; name: string };
+
+/** A tab of a space, with its panes in the desktop's order and the sub-agents its agents started. */
+export type SpaceTab = { key: string; id: string; name: string; items: TabItem[] };
 
 export type Space = {
   key: string;
@@ -8,6 +14,7 @@ export type Space = {
   folder: string;
   factory: boolean;
   agents: Session[];
+  tabs: SpaceTab[];
 };
 
 export const coreOf = (key: string) => key.slice(0, key.lastIndexOf(":"));
@@ -56,6 +63,70 @@ function family(agents: Session[]): Session[] {
   return out;
 }
 
+type Pane = { terminal: string } | { mod: string; id: string };
+
+/** The panes of a tab's split tree, left to right and top to bottom. */
+export function panesOf(root: unknown): Pane[] {
+  const out: Pane[] = [];
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    const n = node as { id?: unknown; content?: { terminal?: unknown; mod?: unknown }; children?: unknown };
+    if (typeof n.content?.terminal === "string") out.push({ terminal: n.content.terminal });
+    else if (typeof n.content?.mod === "string") out.push({ mod: n.content.mod, id: typeof n.id === "string" ? n.id : n.content.mod });
+    if (Array.isArray(n.children)) n.children.forEach(walk);
+  };
+  walk(root);
+  return out;
+}
+
+function tabsOf(space: Space, docTabs: HerdrTab[], sessions: Session[], byKey: Map<string, Session>): SpaceTab[] {
+  const core = space.target.coreId;
+  const live = (s: Session | undefined): s is Session => !!s && s.terminal.state === "live";
+  const mine = sessions.filter((s) => live(s) && coreOf(s.key) === core && s.terminal.labels?.["herdr.space"] === space.id);
+  const tabLabel = (s: Session) => s.terminal.labels?.["herdr.tab"] || null;
+  // Sub-agents have no tab of their own: they go under the agent that started them.
+  const children = new Map<string, Session[]>();
+  for (const s of sessions) {
+    if (!live(s) || !s.parentKey || tabLabel(s) || s.terminal.labels?.["herdr.space"]) continue;
+    if (byKey.has(s.parentKey)) children.set(s.parentKey, [...(children.get(s.parentKey) ?? []), s]);
+  }
+  const placed = new Set<string>();
+  const add = (items: TabItem[], s: Session, sub: boolean) => {
+    if (placed.has(s.key)) return;
+    placed.add(s.key);
+    items.push({ kind: "session", session: s, sub });
+    for (const c of children.get(s.key) ?? []) add(items, c, true);
+  };
+
+  const tabs: SpaceTab[] = [];
+  const known = new Set<string>();
+  docTabs.forEach((tab, i) => {
+    known.add(tab.id);
+    const items: TabItem[] = [];
+    for (const pane of panesOf(tab.root)) {
+      if ("terminal" in pane) {
+        const s = byKey.get(`${core}:${pane.terminal}`);
+        if (live(s)) add(items, s, false);
+      } else items.push({ kind: "mod", key: `${tab.id}:${pane.id}`, name: pane.mod });
+    }
+    // Started here but not in the desktop's tree yet (just made from the phone).
+    for (const s of mine) if (tabLabel(s) === tab.id) add(items, s, false);
+    if (items.length) tabs.push({ key: `${space.key}:${tab.id}`, id: tab.id, name: tab.name || String(i + 1), items });
+  });
+  // Tabs the desktop doesn't know yet, one per label.
+  for (const s of mine) {
+    const id = tabLabel(s) ?? s.key;
+    if (known.has(id) || placed.has(s.key)) continue;
+    let tab = tabs.find((t) => t.id === id);
+    if (!tab) {
+      tab = { key: `${space.key}:${id}`, id, name: "", items: [] };
+      tabs.push(tab);
+    }
+    add(tab.items, s, false);
+  }
+  return tabs;
+}
+
 export function spaces(docs: Record<string, HerdrDoc | null>, targets: Target[], sessions: Session[]): { spaces: Space[]; loose: Session[] } {
   const byKey = new Map(sessions.map((s) => [s.key, s]));
   const out = new Map<string, Space>();
@@ -63,7 +134,7 @@ export function spaces(docs: Record<string, HerdrDoc | null>, targets: Target[],
     const key = `${target.coreId}:${id}`;
     let space = out.get(key);
     if (!space) {
-      space = { key, target, id, name: name || folderName(folder), folder, factory: id.startsWith("factory-"), agents: [] };
+      space = { key, target, id, name: name || folderName(folder), folder, factory: id.startsWith("factory-"), agents: [], tabs: [] };
       out.set(key, space);
     }
     return space;
@@ -102,6 +173,12 @@ export function spaces(docs: Record<string, HerdrDoc | null>, targets: Target[],
   }
 
   for (const space of out.values()) space.agents = family(space.agents);
+
+  const docTabs = new Map<string, HerdrTab[]>();
+  for (const target of targets) {
+    for (const s of docs[target.coreId]?.spaces ?? []) if (s.id) docTabs.set(`${target.coreId}:${s.id}`, s.tabs ?? []);
+  }
+  for (const space of out.values()) space.tabs = tabsOf(space, docTabs.get(space.key) ?? [], sessions, byKey);
 
   const list = [...out.values()].sort(
     (a, b) => Number(a.factory) - Number(b.factory) || a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),

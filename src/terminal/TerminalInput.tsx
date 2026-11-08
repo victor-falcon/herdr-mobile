@@ -5,13 +5,13 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type RefObject } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { utf8Encode } from "../hc/bytes";
 import { HcError, type HcConnection } from "../hc/connection";
 import { updateSettings, useSettings } from "../settings";
-import { colors, fonts, radius, space } from "../ui/theme";
-import { KEY_BAR, keyBytes } from "./keys";
+import { makeStyles, fonts, radius, space, useColors } from "../ui/theme";
+import { CLUSTER_START, KEY_ROWS, keyBytes, type BarKey } from "./keys";
 import type { TerminalHandle } from "./TerminalView";
 import { enterSends, SEND_DELAY_MS, withoutTypedNewline, type Change } from "./composer";
 import { typedText, withCtrl } from "./typing";
@@ -29,6 +29,8 @@ type Props = {
 const NAMED: Record<string, string> = { " ": "space", "\x7f": "backspace", "\r": "enter" };
 
 export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function TerminalInput({ sessionKey, route, terminal, keyboardHeight }, ref) {
+  const colors = useColors();
+  const styles = useStyles();
   const settings = useSettings();
   const insets = useSafeAreaInsets();
   const message = settings.inputMode === "message";
@@ -169,6 +171,12 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
 
   useImperativeHandle(ref, () => ({ openKeyboard }));
 
+  const toggleKeyboard = () => {
+    if (keyboardHeight === 0) return openKeyboard();
+    capture.current?.blur();
+    Keyboard.dismiss();
+  };
+
   const setMode = (next: "direct" | "message") => {
     resetMirror();
     setCtrl(false);
@@ -180,14 +188,26 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
 
   return (
     <>
-      <ScrollView horizontal style={styles.keybar} contentContainerStyle={styles.keybarContent} keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false}>
-        <Key label="" icon={message ? "keypad-outline" : "chatbox-outline"} accessibilityLabel={message ? "Type directly" : "Write a message"} onPress={() => setMode(message ? "direct" : "message")} />
-        {!message && keyboardHeight === 0 && <Key label="keyboard" onPress={openKeyboard} />}
-        <Key label="ctrl" active={ctrl} onPress={() => setCtrl((c) => !c)} />
-        {KEY_BAR.map((k) => (
-          <Key key={k.label} label={k.label} onPress={() => pressKey(k.key)} />
+      <View style={styles.keybar}>
+        {KEY_ROWS.map((row, r) => (
+          <View key={r} style={styles.keyRow}>
+            {row.map((k, i) => (
+              <BarSlot
+                key={k.key}
+                slot={k}
+                style={i === CLUSTER_START ? styles.clusterStart : undefined}
+                message={message}
+                ctrl={ctrl}
+                keyboardOpen={keyboardHeight > 0}
+                onMode={() => setMode(message ? "direct" : "message")}
+                onCtrl={() => setCtrl((c) => !c)}
+                onKeyboard={toggleKeyboard}
+                onKey={pressKey}
+              />
+            ))}
+          </View>
         ))}
-      </ScrollView>
+      </View>
       {message ? (
         <View style={[styles.composer, { paddingBottom: Math.max(bottom, space.sm) }]}>
           <TextInput
@@ -230,32 +250,95 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
   );
 });
 
-function Key({ label, icon, onPress, active, accessibilityLabel }: { label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void; active?: boolean; accessibilityLabel?: string }) {
+const ICONS: Partial<Record<string, keyof typeof Ionicons.glyphMap>> = {
+  paste: "clipboard-outline",
+  enter: "return-down-back",
+  up: "arrow-up",
+  down: "arrow-down",
+  left: "arrow-back",
+  right: "arrow-forward",
+};
+
+/** One slot of the key bar: the bar's own controls, or a key it sends. */
+function BarSlot({ slot, style, message, ctrl, keyboardOpen, onMode, onCtrl, onKeyboard, onKey }: {
+  slot: BarKey;
+  style?: object;
+  message: boolean;
+  ctrl: boolean;
+  keyboardOpen: boolean;
+  onMode: () => void;
+  onCtrl: () => void;
+  onKeyboard: () => void;
+  onKey: (key: string) => void;
+}) {
+  switch (slot.key) {
+    case "mode":
+      return <Key style={style} icon={message ? "terminal-outline" : "chatbox-outline"} accessibilityLabel={message ? "Type directly" : "Write a message"} onPress={onMode} />;
+    case "ctrl":
+      return <Key style={style} label="ctrl" active={ctrl} onPress={onCtrl} />;
+    case "keyboard":
+      // Always in its slot so no key moves; the composer has its own keyboard.
+      return <Key style={style} icon={keyboardOpen ? "chevron-down-outline" : "keypad-outline"} accessibilityLabel={keyboardOpen ? "Hide keyboard" : "Open keyboard"} disabled={message} onPress={onKeyboard} />;
+    default: {
+      const icon = ICONS[slot.key];
+      const name = slot.key === "paste" ? "Paste" : slot.label;
+      return <Key style={style} label={slot.label} icon={icon} accessibilityLabel={icon ? name : undefined} tonal={slot.arrow} onPress={() => onKey(slot.key)} />;
+    }
+  }
+}
+
+/** A Material 3 button for the key bar: tonal for arrows, filled when a toggle is on. */
+function Key({ label = "", icon, onPress, active, tonal, disabled, style, accessibilityLabel }: {
+  label?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  active?: boolean;
+  tonal?: boolean;
+  disabled?: boolean;
+  style?: object;
+  accessibilityLabel?: string;
+}) {
+  const colors = useColors();
+  const styles = useStyles();
+  const ink = active ? colors.onAccent : tonal ? colors.onTonal : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ selected: !!active }}
-      style={({ pressed }) => [styles.key, active && styles.keyActive, pressed && styles.keyPressed]}
+      accessibilityState={{ selected: !!active, disabled: !!disabled }}
+      disabled={disabled}
+      style={({ pressed }) => [styles.key, tonal && styles.keyTonal, active && styles.keyActive, pressed && styles.keyPressed, disabled && styles.keyDisabled, style]}
       onPress={onPress}
     >
-      {icon ? <Ionicons name={icon} size={18} color={active ? colors.onAccent : colors.text} /> : <Text style={[styles.keyText, active && styles.keyTextActive]}>{label}</Text>}
+      {({ pressed }) => (
+        <>
+          {pressed && <View style={[styles.stateLayer, { backgroundColor: ink }]} />}
+          {icon ? <Ionicons name={icon} size={20} color={ink} /> : <Text style={[styles.keyText, { color: ink }, /^\d$/.test(label) && styles.keyDigit]}>{label}</Text>}
+        </>
+      )}
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  keybar: { flexGrow: 0, backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  keybarContent: { padding: space.sm - 2, gap: space.sm - 2 },
-  key: { minWidth: 40, paddingHorizontal: space.md - 2, height: 36, borderRadius: radius.sm, backgroundColor: colors.surfaceHigh, alignItems: "center", justifyContent: "center" },
+const KEY_GAP = 6;
+
+const useStyles = makeStyles((colors) => ({
+  keybar: { padding: space.sm, gap: KEY_GAP, backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  keyRow: { flexDirection: "row", gap: KEY_GAP },
+  clusterStart: { marginLeft: KEY_GAP },
+  key: { flex: 1, minWidth: 0, height: 44, borderRadius: 12, overflow: "hidden", backgroundColor: colors.surfaceHigh, alignItems: "center", justifyContent: "center" },
+  keyTonal: { backgroundColor: colors.tonal },
   keyActive: { backgroundColor: colors.accent },
-  keyPressed: { backgroundColor: colors.border },
-  keyText: { color: colors.text, fontSize: 15, fontFamily: fonts.mono },
-  keyTextActive: { color: colors.onAccent, fontWeight: "700" },
+  // Material 3 Expressive: a pressed button squares off a little.
+  keyPressed: { borderRadius: radius.md - 2 },
+  keyDisabled: { opacity: 0.38 },
+  stateLayer: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, opacity: 0.12 },
+  keyText: { fontSize: 13, fontFamily: fonts.mono, fontWeight: "500" },
+  keyDigit: { fontSize: 15 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: space.sm, paddingTop: space.sm, backgroundColor: colors.surface },
   input: { flex: 1, maxHeight: 120, color: colors.text, backgroundColor: colors.bg, borderRadius: 18, paddingHorizontal: 14, paddingVertical: space.sm, fontSize: 15 },
   send: { backgroundColor: colors.accent, borderRadius: 18, paddingHorizontal: space.lg, height: 36, justifyContent: "center" },
   sendText: { color: colors.onAccent, fontWeight: "700" },
   off: { opacity: 0.4 },
   capture: { position: "absolute", left: 0, top: 0, width: 1, height: 1, opacity: 0, color: "transparent" },
-});
+}));

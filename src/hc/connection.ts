@@ -5,6 +5,9 @@ import { utf8Decode, utf8Encode } from "./bytes";
 import { CLOSE, CREDIT, DATA, encodeFrame, FrameDecoder, RESIZE, resizePayload, u32, type Frame } from "./frames";
 import type { AttachResult, HcEvent, HelloResult, SubscribeResult, Terminal } from "./types";
 
+/** This viewer's own colors, which the core uses to answer a program's color queries (OSC 10/11/12). */
+export type Display = { fg?: string; bg?: string; cursor?: string };
+
 export interface Transport {
   send(bytes: Uint8Array): void;
   close(): void;
@@ -168,7 +171,7 @@ export class HcConnection {
   }
 
   async attach(
-    params: { terminal: string; cols: number; rows: number; observe?: boolean; history?: number; resumed?: boolean },
+    params: { terminal: string; cols: number; rows: number; observe?: boolean; history?: number; resumed?: boolean; display?: Display },
     handlers: AttachHandlers,
   ): Promise<AttachStream> {
     const result = await this.call<AttachResult>("terminal.attach", params);

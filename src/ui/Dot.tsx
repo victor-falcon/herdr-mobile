@@ -1,7 +1,7 @@
 import { ActivityIndicator, View } from "react-native";
 import type { Session } from "../hc/fleet";
 import { statusColor } from "./session-display";
-import { colors } from "./theme";
+import { useColors } from "./theme";
 
 export function Dot({ color, hollow, size = 8 }: { color: string; hollow?: boolean; size?: number }) {
   const ring = Math.max(1.5, size / 5);
@@ -18,9 +18,10 @@ export function Dot({ color, hollow, size = 8 }: { color: string; hollow?: boole
  * a grey ring for plain terminals.
  */
 export function StatusDot({ session, size = 10, spin }: { session: Session; size?: number; spin?: boolean }) {
+  const colors = useColors();
   const state = session.terminal.status?.state;
   if (!state || session.terminal.state !== "live") return <Dot color={colors.border} hollow size={size} />;
   if (state === "working") return spin ? <ActivityIndicator size="small" color={colors.working} /> : <Dot color={colors.working} size={size} />;
-  if (state === "blocked" || state === "error") return <Dot color={statusColor(state)} size={size} />;
-  return <Dot color={statusColor(state)} hollow size={size} />;
+  if (state === "blocked" || state === "error") return <Dot color={statusColor(state, colors)} size={size} />;
+  return <Dot color={statusColor(state, colors)} hollow size={size} />;
 }

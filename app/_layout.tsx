@@ -1,14 +1,16 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
 import { AppState } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { fleet, startFleet } from "../src/fleet-store";
 import { loadSettings } from "../src/settings";
 import { startUpdateChecks } from "../src/updates";
-import { colors } from "../src/ui/theme";
+import { useColors } from "../src/ui/theme";
 
 export default function Layout() {
+  const colors = useColors();
   useEffect(() => {
     void loadSettings();
     void startFleet();
@@ -17,9 +19,14 @@ export default function Layout() {
     return () => sub.remove();
   }, []);
 
+  // The window behind the screens, seen while they slide or the keyboard opens.
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(colors.bg);
+  }, [colors.bg]);
+
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      <StatusBar style="auto" />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },

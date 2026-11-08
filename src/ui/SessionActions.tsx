@@ -4,11 +4,13 @@ import type { ReactNode } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { fleet } from "../fleet-store";
 import type { Session } from "../hc/fleet";
+import { confirmClose } from "./close-session";
 import { agentTitle, ago, shortPath } from "./session-display";
 import { Sheet, SheetAction } from "./Sheet";
-import { colors, space } from "./theme";
+import { makeStyles, space } from "./theme";
 
 export function SessionActions({ session, onClose, children }: { session: Session | null; onClose: () => void; children?: ReactNode }) {
+  const styles = useStyles();
   const t = session?.terminal;
   const live = t?.state === "live";
 
@@ -62,14 +64,14 @@ export function SessionActions({ session, onClose, children }: { session: Sessio
           />
           {live ? (
             <SheetAction
-              label="Kill"
+              label="Close"
+              detail="End it and close its tab"
               danger
-              onPress={run(() =>
-                Alert.alert(`Kill ${agentTitle(session)}?`, "Its program ends. This cannot be undone.", [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Kill", style: "destructive", onPress: () => void call("terminal.kill") },
-                ]),
-              )}
+              onPress={run(async () => {
+                if (!(await confirmClose(agentTitle(session), [session]))) return;
+                if (router.canGoBack()) router.back();
+                else router.replace("/");
+              })}
             />
           ) : (
             <SheetAction
@@ -88,8 +90,8 @@ export function SessionActions({ session, onClose, children }: { session: Sessio
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   head: { paddingHorizontal: 14, paddingBottom: space.md, gap: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, marginBottom: 4 },
   title: { color: colors.text, fontSize: 18, fontWeight: "700" },
   meta: { color: colors.muted, fontSize: 13 },
-});
+}));

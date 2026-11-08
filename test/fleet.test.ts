@@ -203,3 +203,58 @@ test("spaces come from each machine's Herdr layout and from labels, with sub-age
   await write({ spaces: [{ id: "sp_later", name: "later", folder: "/srv", tabs: [] }] });
   await until(() => view().spaces.some((s) => s.name === "later"));
 }, 30_000);
+
+test("tabs list every pane in the desktop's order, rename in the layout, and close by ending their terminals", async () => {
+  const fleet = new Fleet(open);
+  fleets.push(fleet);
+  fleet.setMachines([A]);
+  const b = await until(() => fleet.targets().find((x) => x.on === "b"));
+  const conn = (fleet as any).links.get("a").conn;
+  const project = join(scratch, "tabs");
+  mkdirSync(project, { recursive: true });
+  const agentKey = await fleet.run(b, { argv: AGENT, cwd: project, labels: { "herdr.space": "sp_tabs", "herdr.tab": "tb_split" } });
+  const shellKey = await fleet.run(b, { argv: ["sh", "-c", "exec cat"], cwd: project, labels: { "herdr.space": "sp_tabs", "herdr.tab": "tb_split" } });
+  const local = (key: string) => key.slice(key.lastIndexOf(":") + 1);
+  const current = await conn.call("doc.get", { name: "herdr-app", on: "b" });
+  const root = { type: "row", children: [{ type: "block", id: "p2", content: { terminal: local(shellKey) } }, { type: "column", children: [{ type: "block", id: "p1", content: { terminal: local(agentKey) } }, { type: "block", id: "p3", content: { mod: "files" } }] }] };
+  await conn.call("doc.set", { name: "herdr-app", value: { spaces: [{ id: "sp_tabs", name: "tabs", folder: project, tabs: [{ id: "tb_split", name: "work", root }] }] }, version: current.version, on: "b" });
+
+  const view = () => {
+    const snap = fleet.snapshot();
+    return spaces(snap.docs, [b], snap.sessions).spaces.find((s) => s.id === "sp_tabs");
+  };
+  const tab = await until(() => {
+    const t = view()?.tabs.find((x) => x.id === "tb_split");
+    return t && t.items.length === 3 && t;
+  });
+  expect(tab.items.map((i) => (i.kind === "mod" ? `mod:${i.name}` : i.session.key))).toEqual([shellKey, agentKey, "mod:files"]);
+
+  await fleet.renameTab(b, "sp_tabs", "tb_split", "renamed");
+  const saved = await conn.call("doc.get", { name: "herdr-app", on: "b" });
+  expect(saved.value.spaces[0].tabs[0].name).toBe("renamed");
+  expect(saved.value.spaces[0].tabs[0].root).toEqual(root);
+  await until(() => view()?.tabs[0]?.name === "renamed");
+
+  await fleet.renameSpace(b, "sp_tabs", "  my space ");
+  const named = await conn.call("doc.get", { name: "herdr-app", on: "b" });
+  expect(named.value.spaces[0].name).toBe("my space");
+  expect(named.value.spaces[0].tabs[0].name).toBe("renamed");
+  await until(() => view()?.name === "my space");
+  // An empty name goes back to the folder's.
+  await fleet.renameSpace(b, "sp_tabs", "");
+  await until(() => view()?.name === "tabs" && view());
+
+  const route = fleet.route(shellKey)!;
+  await route.conn.call("terminal.kill", { terminal: route.address });
+  // The core removes a terminal only once it has ended, a moment after kill.
+  for (let i = 0; ; i++) {
+    try {
+      await route.conn.call("terminal.rm", { terminal: route.address });
+      break;
+    } catch (e) {
+      if (i > 50) throw e;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  await until(() => !fleet.snapshot().sessions.some((s) => s.key === shellKey));
+}, 30_000);

@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Share, Text, View } from "react-native";
 import { fleet, setMachines, useFleet, useMachines } from "../src/fleet-store";
 import type { MachineConfig } from "../src/hc/fleet";
 import { phonePublicKey } from "../src/ssh/ssh-transport";
@@ -11,9 +11,11 @@ import { Cell, Row, Section } from "../src/ui/Group";
 import { useKeyboardHeight } from "../src/ui/keyboard";
 import { explainError, linkColor } from "../src/ui/machine-display";
 import { TextField } from "../src/ui/TextField";
-import { colors, fonts, radius, space } from "../src/ui/theme";
+import { makeStyles, useColors, fonts, radius, space } from "../src/ui/theme";
 
 export default function Machines() {
+  const colors = useColors();
+  const styles = useStyles();
   const { links } = useFleet();
   const { machines } = useMachines();
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function Machines() {
               <View key={m.id}>
                 <Row
                   label={m.name}
-                  left={<Dot color={linkColor(l.state)} size={10} />}
+                  left={<Dot color={linkColor(l.state, colors)} size={10} />}
                   hint={l.state === "connected" ? `${address}\nherdr-core ${l.version} · core “${l.core?.name}”${seen}` : address}
                 >
                   <Pressable onPress={() => remove(m)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${m.name}`}>
@@ -97,6 +99,7 @@ export default function Machines() {
 }
 
 function AddMachine({ onAdd, onCancel }: { onAdd: (m: MachineConfig) => void; onCancel: () => void }) {
+  const styles = useStyles();
   const [host, setHost] = useState("");
   const [user, setUser] = useState("");
   const [port, setPort] = useState("22");
@@ -133,6 +136,7 @@ function AddMachine({ onAdd, onCancel }: { onAdd: (m: MachineConfig) => void; on
 }
 
 function Field(props: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; keyboardType?: "number-pad" }) {
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{props.label}</Text>
@@ -141,7 +145,7 @@ function Field(props: { label: string; value: string; onChange: (v: string) => v
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: space.lg, gap: space.xl },
   muted: { color: colors.muted, fontSize: 13 },
@@ -153,4 +157,4 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   field: { gap: space.xs },
   label: { color: colors.muted, fontSize: 12 },
-});
+}));

@@ -1,7 +1,7 @@
 import type { Session } from "../hc/fleet";
-import { colors } from "./theme";
+import type { Colors } from "./theme";
 
-export function statusColor(state: string | undefined): string {
+export function statusColor(state: string | undefined, colors: Colors): string {
   switch (state) {
     case "working":
       return colors.working;

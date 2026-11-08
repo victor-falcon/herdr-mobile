@@ -2,9 +2,10 @@
 // children are divided by hairlines.
 import { Children, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, radius, space } from "./theme";
+import { makeStyles, radius, space } from "./theme";
 
 export function Section({ title, children, style }: { title?: string; children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const styles = useStyles();
   const items = Children.toArray(children);
   return (
     <View style={style}>
@@ -34,6 +35,7 @@ export function Row({
   onPress?: () => void;
   children?: ReactNode;
 }) {
+  const styles = useStyles();
   const body = (
     <>
       {left}
@@ -55,10 +57,11 @@ export function Row({
 
 /** Free content inside a Section, padded like a Row. */
 export function Cell({ children }: { children: ReactNode }) {
+  const styles = useStyles();
   return <View style={styles.cell}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   title: { color: colors.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: space.sm, marginLeft: space.xs },
   card: { backgroundColor: colors.surface, borderRadius: radius.md, overflow: "hidden" },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -69,4 +72,4 @@ const styles = StyleSheet.create({
   hint: { color: colors.muted, fontSize: 13, marginTop: 2 },
   chevron: { color: colors.muted, fontSize: 22 },
   cell: { padding: space.lg, gap: space.sm },
-});
+}));

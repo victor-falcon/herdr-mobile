@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet } from "../../src/fleet-store";
 import { useSettings } from "../../src/settings";
@@ -11,9 +11,11 @@ import { SessionActions } from "../../src/ui/SessionActions";
 import { SheetAction } from "../../src/ui/Sheet";
 import { useKeyboardHeight } from "../../src/ui/keyboard";
 import { agentTitle } from "../../src/ui/session-display";
-import { colors, space } from "../../src/ui/theme";
+import { makeStyles, space, useColors } from "../../src/ui/theme";
 
 export default function SessionScreen() {
+  const colors = useColors();
+  const styles = useStyles();
   const { key } = useLocalSearchParams<{ key: string }>();
   useFleet();
   const settings = useSettings();
@@ -92,8 +94,8 @@ export default function SessionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   gone: { flex: 1, alignItems: "center", justifyContent: "center" },
   muted: { color: colors.muted },
-});
+}));

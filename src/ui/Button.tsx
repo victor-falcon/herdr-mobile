@@ -1,10 +1,8 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
-import { colors, radius, space } from "./theme";
+import { ActivityIndicator, Pressable, Text, type StyleProp, type ViewStyle } from "react-native";
+import { makeStyles, radius, space, useColors } from "./theme";
 
 type Variant = "primary" | "secondary" | "danger";
 
-const fill: Record<Variant, string> = { primary: colors.accent, secondary: colors.surfaceHigh, danger: colors.surfaceHigh };
-const ink: Record<Variant, string> = { primary: colors.onAccent, secondary: colors.text, danger: colors.blocked };
 
 export function Button({
   title,
@@ -21,6 +19,10 @@ export function Button({
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const fill: Record<Variant, string> = { primary: colors.accent, secondary: colors.surfaceHigh, danger: colors.surfaceHigh };
+  const ink: Record<Variant, string> = { primary: colors.onAccent, secondary: colors.text, danger: colors.blocked };
   const off = !!(disabled || loading);
   return (
     <Pressable
@@ -40,10 +42,10 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   base: { minHeight: 44, borderRadius: radius.md, paddingHorizontal: space.lg, paddingVertical: space.md, alignItems: "center", justifyContent: "center" },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.4 },
   text: { fontSize: 15 },
   strong: { fontWeight: "700" },
-});
+}));

@@ -2,13 +2,39 @@
 // only after xterm has drawn them, so a slow phone gets a repaint instead of
 // an endless backlog.
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Linking, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { toBase64, utf8Encode } from "../hc/bytes";
 import type { AttachStream, HcConnection } from "../hc/connection";
-import { colors } from "../ui/theme";
+import { makeStyles, terminalDisplay, useColors, type Colors } from "../ui/theme";
 import { rememberFitSize } from "./fit";
 import { TERMINAL_HTML } from "./terminal-html.generated";
+
+// GitHub Light's ANSI colors, dark enough to read on a light background.
+// The dark scheme keeps xterm's own ANSI colors.
+const LIGHT_ANSI = {
+  black: "#24292f",
+  red: "#cf222e",
+  green: "#116329",
+  yellow: "#4d2d00",
+  blue: "#0969da",
+  magenta: "#8250df",
+  cyan: "#1b7c83",
+  white: "#6e7781",
+  brightBlack: "#57606a",
+  brightRed: "#a40e26",
+  brightGreen: "#1a7f37",
+  brightYellow: "#633c01",
+  brightBlue: "#218bff",
+  brightMagenta: "#a475f9",
+  brightCyan: "#3192aa",
+  brightWhite: "#8c959f",
+};
+
+function terminalTheme(colors: Colors) {
+  const base = { background: colors.bg, foreground: colors.text, cursor: colors.text };
+  return !colors.dark ? { ...base, ...LIGHT_ANSI, cursorAccent: colors.bg, selectionBackground: "#0969da33" } : base;
+}
 
 export type TerminalMode = "fit" | "full";
 
@@ -38,6 +64,8 @@ export type TerminalHandle = {
 };
 
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView({ conn, address, cols, rows, pid, mode, fontSize, onTap, onSwipeBack }, ref) {
+  const colors = useColors();
+  const styles = useStyles();
   const web = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
   const [fitSize, setFitSize] = useState<{ cols: number; rows: number } | null>(null);
@@ -90,6 +118,11 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   }, [ready, mode]);
 
   useEffect(() => {
+    if (ready) post({ type: "theme", theme: terminalTheme(colors) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, colors]);
+
+  useEffect(() => {
     if (ready) post({ type: "font", size: fontSize });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, fontSize]);
@@ -114,7 +147,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     const size = mode === "fit" ? fitRef.current! : { cols, rows };
     conn
       .attach(
-        { terminal: address, cols: size.cols, rows: size.rows, history: 2000 },
+        { terminal: address, cols: size.cols, rows: size.rows, history: 2000, display: terminalDisplay(colors) },
         {
           onData: (bytes, s) => {
             if (cancelled) return;
@@ -142,7 +175,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       stream.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, conn, address, mode, haveFit, pid]);
+    // A new scheme attaches again, so the core answers color queries with it.
+  }, [ready, conn, address, mode, haveFit, pid, colors]);
 
   const onMessage = (raw: string) => {
     const msg = JSON.parse(raw);
@@ -153,6 +187,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       bracketed.current = !!msg.bracketedPaste;
     }
     else if (msg.type === "tap") onTap?.();
+    else if (msg.type === "link" && /^https?:\/\//i.test(msg.url)) Linking.openURL(msg.url).catch(() => {});
     else if (msg.type === "back") onSwipeBack?.();
     else if (msg.type === "input") stream.current?.write(utf8Encode(msg.data));
     else if (msg.type === "size") {
@@ -192,9 +227,9 @@ function describe(r: { reason?: string; exit_code?: number | null }): string {
   return r.reason ?? "closed";
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { flex: 1, backgroundColor: colors.bg },
   web: { flex: 1, backgroundColor: colors.bg },
   notice: { position: "absolute", top: 8, alignSelf: "center", backgroundColor: colors.surfaceHigh, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
   noticeText: { color: colors.text, fontSize: 13 },
-});
+}));

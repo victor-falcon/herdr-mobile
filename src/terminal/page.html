@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=6, user-scalable=yes">
 <style>/*XTERM_CSS*/</style>
 <style>
-  html, body { margin: 0; padding: 0; background: #0d1117; height: 100%; overflow: hidden; }
+  html, body { margin: 0; padding: 0; background: var(--bg, #0d1117); height: 100%; overflow: hidden; }
   #wrap { position: absolute; inset: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
   #term { transform-origin: 0 0; }
   body.fit #term { position: absolute; inset: 4px; }
-  .xterm .xterm-viewport { background: #0d1117 !important; }
+  .xterm .xterm-viewport { background: var(--bg, #0d1117) !important; }
 </style>
 </head>
 <body>
@@ -161,9 +161,80 @@
     step(d);
   }, { passive: false, capture: true });
 
+  // The cell under a point on the screen, in buffer coordinates.
+  function cellAt(clientX, clientY) {
+    var screen = el.querySelector(".xterm-screen");
+    if (!screen) return null;
+    var r = screen.getBoundingClientRect();
+    if (clientX < r.left || clientX >= r.right || clientY < r.top || clientY >= r.bottom) return null;
+    var x = Math.floor((clientX - r.left) / (r.width / term.cols));
+    var y = Math.floor((clientY - r.top) / (r.height / term.rows));
+    return { x: x, y: term.buffer.active.viewportY + y };
+  }
+
+  // A web address in plain text, up to whitespace, quotes or brackets.
+  var URL_RE = /https?:\/\/[^\s"'<>`{}|\\^]+/g;
+
+  function trimUrl(url) {
+    url = url.replace(/[.,;:!?*]+$/, "");
+    // Drop a closing bracket the address did not open, as in "(see https://x.y)".
+    while (/[)\]]$/.test(url)) {
+      var close = url.slice(-1), open = close === ")" ? "(" : "[";
+      if (url.split(open).length >= url.split(close).length) break;
+      url = url.slice(0, -1).replace(/[.,;:!?*]+$/, "");
+    }
+    return url;
+  }
+
+  // A hyperlink a program wrote with OSC 8. xterm keeps these private, so read
+  // them defensively.
+  function oscLinkAt(cell) {
+    try {
+      var line = term.buffer.active.getLine(cell.y);
+      var c = line && line.getCell(cell.x);
+      var id = c && c.extended && c.extended.urlId;
+      var data = id && term._core._oscLinkService.getLinkData(id);
+      return data && /^https?:\/\//i.test(data.uri) ? data.uri : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // The web address under a cell, following a line the terminal wrapped.
+  function linkAt(cell) {
+    var osc = oscLinkAt(cell);
+    if (osc) return osc;
+    var buf = term.buffer.active;
+    var first = cell.y, last = cell.y;
+    while (first > 0 && buf.getLine(first) && buf.getLine(first).isWrapped) first--;
+    while (buf.getLine(last + 1) && buf.getLine(last + 1).isWrapped) last++;
+    var text = "", at = -1;
+    for (var y = first; y <= last; y++) {
+      var line = buf.getLine(y);
+      for (var x = 0; x < term.cols; x++) {
+        var c = line.getCell(x);
+        if (!c || c.getWidth() === 0) continue;
+        if (y === cell.y && x <= cell.x && x + c.getWidth() > cell.x) at = text.length;
+        text += c.getChars() || " ";
+      }
+    }
+    if (at < 0) return null;
+    URL_RE.lastIndex = 0;
+    var m;
+    while ((m = URL_RE.exec(text))) {
+      var url = trimUrl(m[0]);
+      if (at >= m.index && at < m.index + url.length) return url;
+    }
+    return null;
+  }
+
   window.addEventListener("touchend", function (e) {
     if (!touch) return;
-    if (!touch.moved && Date.now() - touch.t < 350) post({ type: "tap" });
+    if (!touch.moved && Date.now() - touch.t < 350) {
+      var cell = cellAt(touch.x, touch.y);
+      var url = cell && linkAt(cell);
+      post(url ? { type: "link", url: url } : { type: "tap" });
+    }
     else if (!touch.scrolling && !touch.zoomed && touch.dx > 80 && Math.abs(touch.dx) > 2 * Math.abs(touch.dy)) post({ type: "back" });
     else if (touch.scrolling) {
       e.stopPropagation();
@@ -229,6 +300,10 @@
       } else if (msg.type === "font") {
         term.options.fontSize = msg.size;
         layout();
+      } else if (msg.type === "theme") {
+        // The app's light or dark palette; keys it leaves out fall back to xterm's own.
+        term.options.theme = msg.theme;
+        document.documentElement.style.setProperty("--bg", msg.theme.background);
       } else if (msg.type === "bottom") {
         term.scrollToBottom();
       }

@@ -3,7 +3,7 @@
 // reaches through `hc machine add` (as `mini/t3`) appears once, keyed by the
 // owning core's id; the direct connection wins.
 import { fromBase64, utf8Decode } from "./bytes";
-import { HcConnection, type Transport } from "./connection";
+import { HcConnection, type Display, type Transport } from "./connection";
 import type { CoreInfo, HcEvent, ListResult, MachineView, Terminal } from "./types";
 
 export type MachineConfig = {
@@ -57,6 +57,8 @@ export type RunSpec = {
   name?: string;
   keep?: boolean;
   labels?: Record<string, string>;
+  /** The phone's colors, so the program sees a light or dark terminal from its start. */
+  display?: Display;
 };
 
 export type ExecOutput = { code: number | null; stdout: string; stderr: string };
@@ -66,6 +68,12 @@ export type OpenTransport = (config: MachineConfig) => Promise<Transport>;
 export type HerdrTab = { id: string; name?: string; root?: unknown };
 export type HerdrSpace = { id: string; name?: string; folder?: string; tabs?: HerdrTab[] };
 export type HerdrDoc = { spaces?: HerdrSpace[] };
+
+/** A trimmed name, or none so the desktop falls back to its default. */
+function setName(item: { name?: string }, name: string) {
+  if (name.trim()) item.name = name.trim();
+  else delete item.name;
+}
 
 export type FleetSnapshot = {
   links: LinkView[];
@@ -418,6 +426,47 @@ export class Fleet {
         } catch {}
       }),
     );
+  }
+
+  /**
+   * Rename a tab in the machine's Herdr layout, as the desktop's tab.rename does:
+   * an empty name goes back to the tab's number.
+   */
+  renameTab(target: Target, spaceId: string, tabId: string, name: string): Promise<void> {
+    return this.editDoc(target, (doc) => {
+      const tab = doc.spaces?.find((s) => s.id === spaceId)?.tabs?.find((t) => t.id === tabId);
+      if (!tab) throw new Error("The desktop doesn't know this tab yet");
+      setName(tab, name);
+    });
+  }
+
+  /** Rename a space in the machine's Herdr layout: an empty name goes back to its folder's. */
+  renameSpace(target: Target, spaceId: string, name: string): Promise<void> {
+    return this.editDoc(target, (doc) => {
+      const space = doc.spaces?.find((s) => s.id === spaceId);
+      if (!space) throw new Error("The desktop doesn't know this space yet");
+      setName(space, name);
+    });
+  }
+
+  /** Change the machine's Herdr layout. Retries when the desktop wrote first. */
+  private async editDoc(target: Target, edit: (doc: HerdrDoc) => void): Promise<void> {
+    const conn = this.links.get(target.linkId)?.conn;
+    if (!conn) throw new Error(`${target.label} is not connected`);
+    for (let attempt = 0; ; attempt++) {
+      const current = await conn.call<{ value: HerdrDoc | null; version?: unknown }>("doc.get", { name: "herdr-app", on: target.on });
+      const doc = current.value;
+      if (!doc) throw new Error("The desktop hasn't saved its layout yet");
+      edit(doc);
+      try {
+        await conn.call("doc.set", { name: "herdr-app", value: doc, version: current.version, on: target.on });
+        this.docs.set(target.coreId, doc);
+        this.changed();
+        return;
+      } catch (e) {
+        if (attempt >= 2) throw e;
+      }
+    }
   }
 
   /** The place a session runs, to start more there or read its documents. */

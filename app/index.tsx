@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link, Stack, router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet, useMachines } from "../src/fleet-store";
 import type { Session } from "../src/hc/fleet";
@@ -12,10 +12,12 @@ import { explainError, linkColor } from "../src/ui/machine-display";
 import { NewSessionSheet } from "../src/ui/NewSessionSheet";
 import { ProjectSheet } from "../src/ui/ProjectSheet";
 import { SpaceList } from "../src/ui/SpaceList";
-import { colors, radius, space } from "../src/ui/theme";
+import { makeStyles, radius, space, useColors } from "../src/ui/theme";
 import { applyUpdate, useUpdates } from "../src/updates";
 
 export default function Agents() {
+  const colors = useColors();
+  const styles = useStyles();
   const { links, sessions, docs } = useFleet();
   const { machines, loaded } = useMachines();
   const [picking, setPicking] = useState(false);
@@ -71,7 +73,7 @@ export default function Agents() {
         {down.length > 0 && (
           <Link href="/machines" asChild>
             <Pressable style={styles.banner} accessibilityRole="button">
-              <Dot color={down.some((l) => l.state !== "connecting") ? colors.blocked : linkColor("connecting")} />
+              <Dot color={down.some((l) => l.state !== "connecting") ? colors.blocked : linkColor("connecting", colors)} />
               <Text style={styles.bannerText} numberOfLines={2}>
                 {down.length > 1
                   ? `${down.length} machines are not connected`
@@ -107,7 +109,7 @@ export default function Agents() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: space.md, paddingTop: space.md },
   banner: { flexDirection: "row", alignItems: "center", gap: space.sm, backgroundColor: colors.surface, borderRadius: radius.md, padding: space.md, marginBottom: space.md - 2 },
@@ -130,4 +132,4 @@ const styles = StyleSheet.create({
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.4)",
   },
   fabPressed: { opacity: 0.8 },
-});
+}));
