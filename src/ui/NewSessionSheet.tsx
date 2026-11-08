@@ -67,7 +67,7 @@ export function NewSessionSheet({ space, onClose }: { space: Space | null; onClo
 function ProgramRow({ label, shell, busy, disabled, onPress, position = "only" }: { label: string; shell: boolean; busy: boolean; disabled: boolean; onPress: () => void; position?: Position }) {
   const colors = useColors();
   const styles = useStyles();
-  const [tl, tr, br, bl] = segmentCorners(position, shape.largeIncreased, shape.extraSmall);
+  const [tl, tr, br, bl] = segmentCorners(position, shape.largeIncreased, shape.extraSmall, "column");
   const tile = busy
     ? { color: colors.onPrimary, background: colors.primary }
     : shell

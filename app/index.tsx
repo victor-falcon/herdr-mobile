@@ -1,5 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Link, Stack, router } from "expo-router";
+import { Stack, router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -78,32 +78,30 @@ export default function Agents() {
             )}
 
             {down.length > 0 && (
-              <Link href="/machines" asChild>
-                <Pressable style={({ pressed }) => [styles.banner, styles.down, pressed && styles.pressed]} accessibilityRole="button">
-                  <Avatar
-                    icon="cloud-offline-outline"
-                    color={down.some((l) => l.state !== "connecting") ? colors.error : linkColor("connecting", colors)}
-                    background={colors.surfaceContainerLowest}
-                  />
-                  <View style={styles.flex}>
-                    {down.length > 1 ? (
-                      <Text style={styles.downName} numberOfLines={2}>
-                        {down.length} machines are not connected
+              <Pressable style={({ pressed }) => [styles.banner, styles.down, pressed && styles.pressed]} onPress={() => router.push("/machines")} accessibilityRole="button">
+                <Avatar
+                  icon="cloud-offline-outline"
+                  color={down.some((l) => l.state !== "connecting") ? colors.error : linkColor("connecting", colors)}
+                  background={colors.surfaceContainerLowest}
+                />
+                <View style={styles.flex}>
+                  {down.length > 1 ? (
+                    <Text style={styles.downName} numberOfLines={2}>
+                      {down.length} machines are not connected
+                    </Text>
+                  ) : (
+                    <>
+                      <Text style={styles.downName} numberOfLines={1}>
+                        {down[0].config.name}
                       </Text>
-                    ) : (
-                      <>
-                        <Text style={styles.downName} numberOfLines={1}>
-                          {down[0].config.name}
-                        </Text>
-                        <Text style={styles.downText} numberOfLines={2}>
-                          {down[0].state === "connecting" ? "connecting…" : explainError(down[0].error, down[0].config) || "offline"}
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={colors.onErrorContainer} />
-                </Pressable>
-              </Link>
+                      <Text style={styles.downText} numberOfLines={2}>
+                        {down[0].state === "connecting" ? "connecting…" : explainError(down[0].error, down[0].config) || "offline"}
+                      </Text>
+                    </>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.onErrorContainer} />
+              </Pressable>
             )}
           </View>
         )}

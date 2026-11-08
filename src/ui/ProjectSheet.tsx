@@ -91,7 +91,7 @@ export function ProjectSheet({ visible, spaces, onClose }: { visible: boolean; s
         keyExtractor={(it) => ("heading" in it ? `h:${it.heading}` : `${it.project.target.coreId}:${it.project.folder}`)}
         renderItem={({ item }) => {
           if ("heading" in item) return <Text style={[styles.heading, !item.first && styles.headingLater]}>{item.heading}</Text>;
-          const [tl, tr, br, bl] = segmentCorners(item.position, shape.largeIncreased, shape.extraSmall);
+          const [tl, tr, br, bl] = segmentCorners(item.position, shape.largeIncreased, shape.extraSmall, "column");
           return (
             <Pressable
               accessibilityRole="button"
