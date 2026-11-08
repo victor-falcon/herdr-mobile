@@ -140,7 +140,17 @@ function Field(props: { label: string; value: string; onChange: (v: string) => v
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{props.label}</Text>
-      <TextField inset value={props.value} onChangeText={props.onChange} placeholder={props.placeholder} keyboardType={props.keyboardType} />
+      {/* Hosts and users are typed exactly: no capitals, corrections or spaces the keyboard adds after a dot. */}
+      <TextField
+        inset
+        value={props.value}
+        onChangeText={props.onChange}
+        placeholder={props.placeholder}
+        keyboardType={props.keyboardType ?? "url"}
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+      />
     </View>
   );
 }
