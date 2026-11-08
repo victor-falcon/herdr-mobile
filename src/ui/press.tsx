@@ -13,15 +13,20 @@ export function corners(all: number): Corners {
 /** Where a segment sits in a connected group. */
 export type Position = "first" | "middle" | "last" | "only";
 
-/** A connected segment's corners: `outer` on the group's ends, `inner` where it meets its neighbours. */
-export function segmentCorners(position: Position, outer: number, inner: number): Corners {
+/**
+ * A connected segment's corners: `outer` on the group's ends, `inner` where it
+ * meets its neighbours. A "row" group (buttons) joins left to right; a
+ * "column" group (sheet rows, lists) joins top to bottom.
+ */
+export function segmentCorners(position: Position, outer: number, inner: number, direction: "row" | "column" = "row"): Corners {
+  const column = direction === "column";
   switch (position) {
     case "first":
-      return [outer, inner, inner, outer];
+      return column ? [outer, outer, inner, inner] : [outer, inner, inner, outer];
     case "middle":
       return corners(inner);
     case "last":
-      return [inner, outer, outer, inner];
+      return column ? [inner, inner, outer, outer] : [inner, outer, outer, inner];
     case "only":
       return corners(outer);
   }

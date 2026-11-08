@@ -1,18 +1,19 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import type { Space } from "../spaces";
 import { useSettings } from "../settings";
+import { Avatar } from "./Avatar";
 import { programOf, startAgent, useInstalledPrograms } from "./new-session";
-import { Sheet } from "./Sheet";
-import { makeStyles, radius, space as gap, useColors } from "./theme";
+import { segmentCorners, withPositions, type Position } from "./press";
+import { LoadingIndicator } from "./Shapes";
+import { Sheet, SheetHeader } from "./Sheet";
+import { makeStyles, shape, space as gap, typography, useColors } from "./theme";
 
 // The key for the plain shell row, which no agent command can be.
 const SHELL = "\u0000shell";
 
 export function NewSessionSheet({ space, onClose }: { space: Space | null; onClose: () => void }) {
-  const colors = useColors();
   const styles = useStyles();
   const { agents: configured } = useSettings();
   const [starting, setStarting] = useState<string | null>(null);
@@ -39,54 +40,70 @@ export function NewSessionSheet({ space, onClose }: { space: Space | null; onClo
 
   return (
     <Sheet visible={!!space} onClose={onClose}>
-      <View style={styles.header}>
-        <Text style={styles.title} numberOfLines={1}>
-          Open a new tab
-        </Text>
-        <Text style={styles.where} numberOfLines={1}>
-          in {space?.name}
-          {space?.target.label ? ` · ${space.target.label}` : ""}
-        </Text>
-      </View>
-      {installed && configured.length > 0 && agents.length === 0 && (
-        <Text style={styles.note}>None of your agents is installed on {space?.target.label}.</Text>
-      )}
+      <SheetHeader title="Open a new tab" meta={`in ${space?.name ?? ""}${space?.target.label ? ` · ${space.target.label}` : ""}`} />
+      {installed && configured.length > 0 && agents.length === 0 && <Text style={styles.note}>None of your agents is installed on {space?.target.label}.</Text>}
       <View style={styles.list}>
-        {rows.map((r) => {
-          const waiting = r.command !== null && !installed;
-          return (
-            <Pressable
-              key={r.key}
-              accessibilityRole="button"
-              accessibilityLabel={r.label}
-              disabled={waiting || !!starting}
-              onPress={() => void start(r.key, r.command)}
-              style={({ pressed }) => [styles.agent, pressed && styles.pressed, (waiting || (starting && starting !== r.key)) && styles.off]}
-            >
-              <View style={styles.icon}>
-                <Ionicons name={r.command === null ? "terminal-outline" : "sparkles-outline"} size={18} color={colors.text} />
-              </View>
-              <Text style={styles.label} numberOfLines={1}>
-                {r.label}
-              </Text>
-              {starting === r.key && <ActivityIndicator color={colors.text} />}
-            </Pressable>
-          );
-        })}
+        {withPositions(
+          rows.map((r) => {
+            const waiting = r.command !== null && !installed;
+            return (
+              <ProgramRow
+                key={r.key}
+                label={r.label}
+                shell={r.command === null}
+                busy={starting === r.key}
+                disabled={waiting || !!starting}
+                onPress={() => void start(r.key, r.command)}
+              />
+            );
+          }),
+        )}
       </View>
     </Sheet>
   );
 }
 
+/** One agent (or the plain terminal) as a segmented row; the one being started lights up. */
+function ProgramRow({ label, shell, busy, disabled, onPress, position = "only" }: { label: string; shell: boolean; busy: boolean; disabled: boolean; onPress: () => void; position?: Position }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const [tl, tr, br, bl] = segmentCorners(position, shape.largeIncreased, shape.extraSmall, "column");
+  const tile = busy
+    ? { color: colors.onPrimary, background: colors.primary }
+    : shell
+      ? { color: colors.onSurfaceVariant, background: colors.surfaceContainerHighest }
+      : { color: colors.onSecondaryContainer, background: colors.secondaryContainer };
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled, busy }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        { borderTopLeftRadius: tl, borderTopRightRadius: tr, borderBottomRightRadius: br, borderBottomLeftRadius: bl },
+        pressed && styles.pressed,
+        busy && styles.busy,
+        disabled && !busy && styles.off,
+      ]}
+    >
+      <Avatar icon={shell ? "terminal-outline" : "sparkles-outline"} size={40} color={tile.color} background={tile.background} style={styles.tile} />
+      <Text style={[styles.label, busy && { color: colors.onPrimaryContainer }]} numberOfLines={1}>
+        {label}
+      </Text>
+      {busy && <LoadingIndicator size={24} color={colors.primary} label="Starting" />}
+    </Pressable>
+  );
+}
+
 const useStyles = makeStyles((colors) => ({
-  header: { marginHorizontal: 14, marginTop: gap.xs, marginBottom: gap.sm },
-  title: { color: colors.text, fontSize: 17, fontWeight: "700" },
-  where: { color: colors.muted, fontSize: 13, marginTop: 2 },
-  list: { marginBottom: gap.sm },
-  agent: { flexDirection: "row", alignItems: "center", gap: gap.md, paddingHorizontal: 14, paddingVertical: 14, borderRadius: radius.md },
-  icon: { width: 36, height: 36, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceHigh },
-  pressed: { backgroundColor: colors.surfaceHigh },
-  off: { opacity: 0.4 },
-  label: { flex: 1, color: colors.text, fontSize: 16, fontWeight: "600" },
-  note: { color: colors.muted, fontSize: 14, padding: 14 },
+  list: { gap: 2 },
+  row: { flexDirection: "row", alignItems: "center", gap: gap.lg, paddingHorizontal: gap.lg, paddingVertical: gap.md, minHeight: 64, backgroundColor: colors.surfaceContainerLowest },
+  tile: { borderRadius: shape.medium },
+  pressed: { backgroundColor: colors.surfaceContainerHigh },
+  busy: { backgroundColor: colors.primaryContainer },
+  off: { opacity: 0.38 },
+  label: { ...typography.titleMedium, flex: 1, color: colors.onSurface },
+  note: { ...typography.bodyMedium, color: colors.onSurfaceVariant, paddingHorizontal: gap.sm, paddingBottom: gap.md },
 }));

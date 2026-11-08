@@ -4,13 +4,16 @@ import { Alert, Animated, PanResponder, Pressable, Text, View } from "react-nati
 import { fleet } from "../fleet-store";
 import type { Session } from "../hc/fleet";
 import { folderName, type Space, type SpaceTab, type TabItem } from "../spaces";
+import { Avatar, StatusAvatar } from "./Avatar";
 import { Button } from "./Button";
+import { Chip } from "./Chip";
 import { confirmClose } from "./close-session";
-import { StatusDot } from "./Dot";
+import { Card } from "./Group";
+import { IconButton } from "./IconButton";
 import { ago, agentTitle, sessionTitle, shortPath } from "./session-display";
-import { Sheet, SheetAction } from "./Sheet";
+import { Sheet, SheetAction, SheetActions, SheetHeader } from "./Sheet";
 import { TextField } from "./TextField";
-import { makeStyles, fonts, radius, space as gap, useColors } from "./theme";
+import { emphasized, fonts, makeStyles, shape, space as gap, typography, useColors } from "./theme";
 
 type Props = {
   spaces: Space[];
@@ -29,6 +32,8 @@ type RowTarget = {
   sessions: Session[];
   /** "tab" when closing these closes the tab. */
   scope: "tab" | "pane";
+  /** What the menu's avatar shows: the row's session, a desktop panel or a split tab. */
+  lead: Session | "mod" | "tab";
 };
 
 type Actions = { onSelect: (s: Session) => void; onMenu: (t: RowTarget) => void; onClose: (t: RowTarget) => void };
@@ -61,121 +66,137 @@ export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Pro
   const actions: Actions = { onSelect, onMenu: setMenu, onClose: close };
 
   return (
-    <View>
-      {spaces.map((sp) => (
-        <View key={sp.key} style={styles.space}>
-          <View style={styles.head}>
-            <Pressable
-              onLongPress={() => setSpaceMenu(sp)}
-              accessibilityRole="button"
-              accessibilityHint="Hold for options"
-              style={({ pressed }) => [styles.headTitle, pressed && styles.headPressed]}
-            >
-              <Text style={styles.name} numberOfLines={1}>
-                {sp.name}
-              </Text>
-              {sp.factory && (
-                <View style={styles.tag}>
-                  <Text style={styles.tagText}>factory</Text>
+    <View style={styles.list}>
+      {spaces.map((sp) => {
+        const where = [showMachine ? sp.target.label : "", sp.folder ? shortPath(sp.folder) : ""].filter(Boolean).join(" · ");
+        return (
+          <View key={sp.key} style={styles.space}>
+            <View style={styles.head}>
+              <Pressable
+                onLongPress={() => setSpaceMenu(sp)}
+                accessibilityRole="button"
+                accessibilityHint="Hold for options"
+                style={({ pressed }) => [styles.headTitle, pressed && styles.headPressed]}
+              >
+                <View style={styles.nameLine}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {sp.name}
+                  </Text>
+                  {sp.factory && <Chip label="factory" />}
                 </View>
-              )}
-              {showMachine && <Text style={styles.machine}>{sp.target.label}</Text>}
-            </Pressable>
-            <Pressable
-              hitSlop={10}
-              onPress={() => onStart(sp)}
-              accessibilityRole="button"
-              accessibilityLabel={`New tab in ${sp.name}`}
-              style={({ pressed }) => [styles.add, pressed && styles.addPressed]}
-            >
-              <Ionicons name="add" size={20} color={colors.text} />
-            </Pressable>
+                {where ? (
+                  <Text style={styles.where} numberOfLines={1}>
+                    {where}
+                  </Text>
+                ) : null}
+              </Pressable>
+              <IconButton icon="add" variant="tonal" size={48} label={`New tab in ${sp.name}`} onPress={() => onStart(sp)} />
+            </View>
+            {sp.tabs.length > 0 && (
+              <Card>
+                {sp.tabs.map((tab) => (
+                  <TabRows key={tab.key} space={sp} tab={tab} actions={actions} />
+                ))}
+              </Card>
+            )}
           </View>
-          {sp.tabs.map((tab) => (
-            <TabRows key={tab.key} space={sp} tab={tab} actions={actions} />
-          ))}
-        </View>
-      ))}
+        );
+      })}
       {loose.length > 0 && (
         <View style={styles.space}>
-          <View style={styles.head}>
-            <Text style={[styles.name, styles.dim]}>Not in a space</Text>
+          <View style={[styles.head, styles.looseHead]}>
+            <Text style={[styles.name, styles.dim]} accessibilityRole="header">
+              Not in a space
+            </Text>
           </View>
-          {loose.map((s) => {
-            const target: RowTarget = { title: agentTitle(s), space: null, tab: null, sessions: [s], scope: "pane" };
-            return (
-              <Swipe key={s.key} onClose={() => close(target)}>
-                <AgentRow session={s} sub={false} onPress={() => onSelect(s)} onLongPress={() => setMenu(target)} />
-              </Swipe>
-            );
-          })}
+          <Card>
+            {loose.map((s) => {
+              const target: RowTarget = { title: agentTitle(s), space: null, tab: null, sessions: [s], scope: "pane", lead: s };
+              return (
+                <Swipe key={s.key} onClose={() => close(target)}>
+                  <AgentRow session={s} sub={false} onPress={() => onSelect(s)} onLongPress={() => setMenu(target)} />
+                </Swipe>
+              );
+            })}
+          </Card>
         </View>
       )}
 
       <Sheet visible={!!menu} onClose={() => setMenu(null)}>
         {menu && (
           <>
-            <View style={styles.menuHead}>
-              <Text style={styles.menuTitle} numberOfLines={1}>
-                {menu.title}
-              </Text>
-              {menu.tab && menu.scope === "pane" && <Text style={styles.menuMeta}>A pane of {tabTitle(menu.tab) ?? "a split tab"}</Text>}
-            </View>
-            {menu.tab && menu.space && (
-              <SheetAction
-                label="Rename tab"
-                detail={tabTitle(menu.tab) ? `Now “${menu.tab.name}”` : "It has no name yet"}
-                onPress={() => {
-                  const { space, tab } = menu;
-                  if (!space || !tab) return;
-                  setRenaming({
-                    title: "Rename tab",
-                    placeholder: "Tab name (empty: its number)",
-                    initial: tabTitle(tab) ?? "",
-                    save: (name) => fleet.renameTab(space.target, space.id, tab.id, name),
-                  });
-                  setMenu(null);
-                }}
-              />
-            )}
-            {menu.sessions.length > 0 && (
-              <SheetAction
-                label={menu.scope === "tab" ? "Close tab" : "Close pane"}
-                detail={menu.scope === "tab" ? "End it and close the tab" : "End it and close this pane"}
-                danger
-                onPress={() => {
-                  const t = menu;
-                  setMenu(null);
-                  close(t);
-                }}
-              />
-            )}
+            <SheetHeader
+              title={menu.title}
+              meta={menu.tab && menu.scope === "pane" ? `A pane of ${tabTitle(menu.tab) ?? "a split tab"}` : undefined}
+              avatar={
+                menu.lead === "mod" ? (
+                  <Avatar icon="grid-outline" size={48} square color={colors.onSurfaceVariant} background={colors.surfaceContainerHighest} />
+                ) : menu.lead === "tab" ? (
+                  <Avatar icon="albums-outline" size={48} square color={colors.onSecondaryContainer} background={colors.secondaryContainer} />
+                ) : (
+                  <StatusAvatar session={menu.lead} size={48} square />
+                )
+              }
+            />
+            <SheetActions>
+              {menu.tab && menu.space && (
+                <SheetAction
+                  icon="pencil"
+                  label="Rename tab"
+                  detail={tabTitle(menu.tab) ? `Now “${menu.tab.name}”` : "It has no name yet"}
+                  onPress={() => {
+                    const { space, tab } = menu;
+                    if (!space || !tab) return;
+                    setRenaming({
+                      title: "Rename tab",
+                      label: "Tab name",
+                      placeholder: "Leave empty to use its number",
+                      initial: tabTitle(tab) ?? "",
+                      save: (name) => fleet.renameTab(space.target, space.id, tab.id, name),
+                    });
+                    setMenu(null);
+                  }}
+                />
+              )}
+              {menu.sessions.length > 0 && (
+                <SheetAction
+                  icon="close"
+                  label={menu.scope === "tab" ? "Close tab" : "Close pane"}
+                  detail={menu.scope === "tab" ? "End it and close the tab" : "End it and close this pane"}
+                  danger
+                  onPress={() => {
+                    const t = menu;
+                    setMenu(null);
+                    close(t);
+                  }}
+                />
+              )}
+            </SheetActions>
           </>
         )}
       </Sheet>
       <Sheet visible={!!spaceMenu} onClose={() => setSpaceMenu(null)}>
         {spaceMenu && (
           <>
-            <View style={styles.menuHead}>
-              <Text style={styles.menuTitle} numberOfLines={1}>
-                {spaceMenu.name}
-              </Text>
-              {!!spaceMenu.folder && <Text style={styles.menuMeta}>{shortPath(spaceMenu.folder)}</Text>}
-            </View>
-            <SheetAction
-              label="Rename space"
-              detail={`Now “${spaceMenu.name}”`}
-              onPress={() => {
-                const sp = spaceMenu;
-                setRenaming({
-                  title: "Rename space",
-                  placeholder: `Space name (empty: ${folderName(sp.folder) || "its folder"})`,
-                  initial: sp.name,
-                  save: (name) => fleet.renameSpace(sp.target, sp.id, name),
-                });
-                setSpaceMenu(null);
-              }}
-            />
+            <SheetHeader title={spaceMenu.name} meta={spaceMenu.folder ? shortPath(spaceMenu.folder) : undefined} icon="folder-outline" />
+            <SheetActions>
+              <SheetAction
+                icon="pencil"
+                label="Rename space"
+                detail={`Now “${spaceMenu.name}”`}
+                onPress={() => {
+                  const sp = spaceMenu;
+                  setRenaming({
+                    title: "Rename space",
+                    label: "Space name",
+                    placeholder: `Leave empty to use ${folderName(sp.folder) || "its folder"}`,
+                    initial: sp.name,
+                    save: (name) => fleet.renameSpace(sp.target, sp.id, name),
+                  });
+                  setSpaceMenu(null);
+                }}
+              />
+            </SheetActions>
           </>
         )}
       </Sheet>
@@ -185,7 +206,7 @@ export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Pro
 }
 
 /** What the rename sheet edits: a tab or a space. */
-type Renaming = { title: string; placeholder: string; initial: string; save: (name: string) => Promise<void> };
+type Renaming = { title: string; label: string; placeholder: string; initial: string; save: (name: string) => Promise<void> };
 
 function RenameSheet({ renaming, onClose }: { renaming: Renaming | null; onClose: () => void }) {
   const styles = useStyles();
@@ -210,9 +231,10 @@ function RenameSheet({ renaming, onClose }: { renaming: Renaming | null; onClose
   };
   return (
     <Sheet visible={!!renaming} onClose={onClose}>
+      <SheetHeader title={renaming?.title ?? ""} />
       <View style={styles.rename}>
-        <Text style={styles.menuTitle}>{renaming?.title}</Text>
         <TextField
+          label={renaming?.label}
           value={name}
           onChangeText={setName}
           placeholder={renaming?.placeholder}
@@ -220,36 +242,36 @@ function RenameSheet({ renaming, onClose }: { renaming: Renaming | null; onClose
           autoCapitalize="sentences"
           returnKeyType="done"
           onSubmitEditing={() => void save()}
-          inset
         />
-        <Button title="Rename" onPress={() => void save()} loading={saving} />
+        <Button title="Rename" variant="filled" size="medium" onPress={() => void save()} loading={saving} />
       </View>
     </Sheet>
   );
 }
 
-/** A tab with one pane is one row; a split tab gets its name over its panes. */
+/** A tab with one pane is one block of rows; a split tab gets an inner container with its name over its panes. */
 function TabRows({ space, tab, actions }: { space: Space; tab: SpaceTab; actions: Actions }) {
   const colors = useColors();
   const styles = useStyles();
   const panes = tab.items.filter((i) => !(i.kind === "session" && i.sub));
   const split = panes.length > 1;
-  const whole: RowTarget = { title: tabTitle(tab) ?? "this tab", space, tab, sessions: tabSessions(tab), scope: "tab" };
+  const whole: RowTarget = { title: tabTitle(tab) ?? "this tab", space, tab, sessions: tabSessions(tab), scope: "tab", lead: "tab" };
 
   const row = (item: TabItem) => {
-    if (item.kind === "mod") return <ModRow key={item.key} name={item.name} nested={split} onLongPress={() => actions.onMenu({ ...whole, title: item.name, sessions: [], scope: "pane" })} />;
+    if (item.kind === "mod")
+      return <ModRow key={item.key} name={item.name} nested={split} onLongPress={() => actions.onMenu({ ...whole, title: item.name, sessions: [], scope: "pane", lead: "mod" })} />;
     const s = item.session;
     const title = s.terminal.status ? agentTitle(s) : sessionTitle(s);
     // Closing a sub-agent ends only it; the only pane of a tab takes the tab with it.
     const target: RowTarget = item.sub
-      ? { title, space, tab, sessions: [s], scope: "pane" }
+      ? { title, space, tab, sessions: [s], scope: "pane", lead: s }
       : split
-        ? { title, space, tab, sessions: withSubs(tab, s), scope: "pane" }
-        : { ...whole, title };
+        ? { title, space, tab, sessions: withSubs(tab, s), scope: "pane", lead: s }
+        : { ...whole, title, lead: s };
     const onPress = () => actions.onSelect(s);
     const onLongPress = () => actions.onMenu(target);
     return (
-      <Swipe key={s.key} onClose={() => actions.onClose(target)}>
+      <Swipe key={s.key} nested={split} onClose={() => actions.onClose(target)}>
         {s.terminal.status ? (
           <AgentRow session={s} sub={item.sub} nested={split} onPress={onPress} onLongPress={onLongPress} />
         ) : (
@@ -258,18 +280,20 @@ function TabRows({ space, tab, actions }: { space: Space; tab: SpaceTab; actions
       </Swipe>
     );
   };
-  if (!split) return <>{tab.items.map(row)}</>;
+  if (!split) return <View>{tab.items.map(row)}</View>;
   return (
-    <View>
-      <Swipe onClose={() => actions.onClose(whole)} disabled={whole.sessions.length === 0}>
-        <Pressable onLongPress={() => actions.onMenu(whole)} style={({ pressed }) => [styles.tabHead, pressed && styles.rowPressed]}>
-          <Ionicons name="albums-outline" size={14} color={colors.muted} />
-          <Text style={styles.tabName} numberOfLines={1}>
-            {tab.name || "New tab"}
-          </Text>
-        </Pressable>
-      </Swipe>
-      {tab.items.map(row)}
+    <View style={styles.splitOuter}>
+      <View style={styles.split}>
+        <Swipe nested onClose={() => actions.onClose(whole)} disabled={whole.sessions.length === 0}>
+          <Pressable onLongPress={() => actions.onMenu(whole)} accessibilityHint="Hold for options" style={({ pressed }) => [styles.tabHead, pressed && styles.nestedPressed]}>
+            <Ionicons name="albums-outline" size={20} color={colors.onSurfaceVariant} />
+            <Text style={styles.tabName} numberOfLines={1}>
+              {tab.name || "New tab"}
+            </Text>
+          </Pressable>
+        </Swipe>
+        {tab.items.map(row)}
+      </View>
     </View>
   );
 }
@@ -278,7 +302,7 @@ const REVEAL = 96; // how far the row slides to show Close
 const TRIGGER = 72; // past this, letting go asks to close
 
 /** Slide a row left to show Close; let go past the mark and it asks first. */
-function Swipe({ children, onClose, disabled }: { children: ReactNode; onClose: () => void; disabled?: boolean }) {
+function Swipe({ children, onClose, disabled, nested }: { children: ReactNode; onClose: () => void; disabled?: boolean; nested?: boolean }) {
   const colors = useColors();
   const styles = useStyles();
   const x = useRef(new Animated.Value(0)).current;
@@ -302,10 +326,10 @@ function Swipe({ children, onClose, disabled }: { children: ReactNode; onClose: 
   return (
     <View style={styles.swipe}>
       <Animated.View style={[styles.swipeAction, { opacity: reveal }]}>
-        <Ionicons name="close-circle-outline" size={18} color={colors.onAccent} />
+        <Ionicons name="close" size={20} color={colors.onError} />
         <Text style={styles.swipeText}>Close</Text>
       </Animated.View>
-      <Animated.View style={[styles.swipeRow, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
+      <Animated.View style={[nested ? styles.swipeRowNested : styles.swipeRow, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
         {children}
       </Animated.View>
     </View>
@@ -322,16 +346,14 @@ function TerminalRow({ session, name, nested = false, onPress, onLongPress }: Ro
   // A tab Herdr only numbered says nothing: show the program instead.
   const title = name && !/^\d+$/.test(name) ? name : sessionTitle(session);
   return (
-    <Pressable onPress={onPress} onLongPress={onLongPress} accessibilityRole="button" style={({ pressed }) => [styles.row, nested && styles.nested, pressed && styles.rowPressed]}>
-      <View style={styles.indicator}>
-        <Ionicons name="terminal-outline" size={16} color={colors.muted} />
-      </View>
-      <View style={styles.flex}>
+    <Pressable onPress={onPress} onLongPress={onLongPress} accessibilityRole="button" style={({ pressed }) => [styles.row, nested && styles.nested, pressed && (nested ? styles.nestedPressed : styles.pressed)]}>
+      <Avatar icon="terminal-outline" color={colors.onSurfaceVariant} background={colors.surfaceContainerHighest} />
+      <View style={styles.text}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
         {t.cwd ? (
-          <Text style={styles.msg} numberOfLines={1}>
+          <Text style={[styles.msg, styles.path]} numberOfLines={1}>
             {shortPath(t.cwd)}
           </Text>
         ) : null}
@@ -345,11 +367,9 @@ function ModRow({ name, nested, onLongPress }: { name: string; nested: boolean; 
   const colors = useColors();
   const styles = useStyles();
   return (
-    <Pressable onLongPress={onLongPress} style={({ pressed }) => [styles.row, nested && styles.nested, pressed && styles.rowPressed]}>
-      <View style={styles.indicator}>
-        <Ionicons name="grid-outline" size={15} color={colors.muted} />
-      </View>
-      <View style={styles.flex}>
+    <Pressable onLongPress={onLongPress} style={({ pressed }) => [styles.row, nested && styles.nested, pressed && (nested ? styles.nestedPressed : styles.pressed)]}>
+      <Avatar icon="grid-outline" color={colors.onSurfaceVariant} background={nested ? colors.surfaceContainerLow : colors.surfaceContainerHighest} />
+      <View style={styles.text}>
         <Text style={[styles.title, styles.dim]} numberOfLines={1}>
           {name}
         </Text>
@@ -360,7 +380,6 @@ function ModRow({ name, nested, onLongPress }: { name: string; nested: boolean; 
 }
 
 function AgentRow({ session, sub, nested = false, onPress, onLongPress }: RowProps & { session: Session; sub: boolean }) {
-  const colors = useColors();
   const styles = useStyles();
   const t = session.terminal;
   const title = agentTitle(session);
@@ -371,17 +390,15 @@ function AgentRow({ session, sub, nested = false, onPress, onLongPress }: RowPro
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.row, nested && styles.nested, sub && (nested ? styles.nestedChild : styles.child), pressed && styles.rowPressed]}
+      style={({ pressed }) => [styles.row, nested && styles.nested, sub && (nested ? styles.nestedChild : styles.child), pressed && (nested ? styles.nestedPressed : styles.pressed)]}
     >
-      <View style={styles.indicator}>
-        <StatusDot session={session} size={10} spin />
-      </View>
-      <View style={styles.flex}>
-        <Text style={styles.title} numberOfLines={1}>
+      <StatusAvatar session={session} size={sub ? 32 : 40} />
+      <View style={styles.text}>
+        <Text style={sub ? styles.subTitle : styles.title} numberOfLines={1}>
           {title}
         </Text>
         {msg ? (
-          <Text style={[styles.msg, blocked && { color: colors.blocked }]} numberOfLines={1}>
+          <Text style={[styles.msg, blocked && styles.blocked]} numberOfLines={1}>
             {msg}
           </Text>
         ) : null}
@@ -391,49 +408,54 @@ function AgentRow({ session, sub, nested = false, onPress, onLongPress }: RowPro
   );
 }
 
+// How far sub-agents are indented, in a card and inside a split tab (from the design).
+const CHILD = 44;
+const NESTED_CHILD = 40;
+
 const useStyles = makeStyles((colors) => ({
-  space: { marginBottom: gap.lg },
-  head: { flexDirection: "row", alignItems: "center", gap: gap.sm, paddingHorizontal: gap.sm, minHeight: 36 },
-  headTitle: { flex: 1, flexDirection: "row", alignItems: "center", gap: gap.sm, alignSelf: "stretch", borderRadius: radius.sm },
+  list: { gap: gap.xl },
+  space: { gap: gap.sm },
+  head: { flexDirection: "row", alignItems: "center", gap: gap.sm, paddingLeft: gap.sm },
+  looseHead: { minHeight: 48 },
+  headTitle: { flex: 1, gap: 2, alignSelf: "stretch", justifyContent: "center", borderRadius: shape.small },
   headPressed: { opacity: 0.6 },
-  name: { color: colors.text, fontSize: 15, fontWeight: "700", fontFamily: fonts.mono, flexShrink: 1 },
-  dim: { color: colors.muted },
-  tag: { borderRadius: radius.sm, backgroundColor: colors.accent + "26", paddingHorizontal: 6, paddingVertical: 1 },
-  tagText: { color: colors.accent, fontSize: 10, fontWeight: "700" },
-  machine: { color: colors.muted, fontSize: 12 },
-  flex: { flex: 1 },
-  add: { width: 32, height: 32, borderRadius: radius.full, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
-  addPressed: { backgroundColor: colors.surfaceHigh },
-  row: { flexDirection: "row", alignItems: "center", gap: gap.md, paddingLeft: gap.sm, paddingRight: gap.sm, paddingVertical: gap.md, borderRadius: radius.md },
-  child: { paddingLeft: gap.xl + gap.sm },
-  nested: { paddingLeft: gap.xl },
-  nestedChild: { paddingLeft: gap.xl * 2 },
-  tabHead: { flexDirection: "row", alignItems: "center", gap: gap.sm, paddingHorizontal: gap.sm, paddingTop: gap.sm, paddingBottom: gap.xs, borderRadius: radius.md },
-  tabName: { color: colors.muted, fontSize: 13, fontWeight: "600", flexShrink: 1 },
-  rowPressed: { backgroundColor: colors.surface },
-  indicator: { width: 20, alignItems: "center" },
-  title: { color: colors.text, fontSize: 15 },
-  msg: { color: colors.muted, fontSize: 13, marginTop: 2 },
-  age: { color: colors.muted, fontSize: 12, fontFamily: fonts.mono },
-  swipe: { borderRadius: radius.md, overflow: "hidden" },
+  nameLine: { flexDirection: "row", alignItems: "center", gap: gap.sm },
+  name: { ...emphasized.titleLarge, color: colors.onSurface, flexShrink: 1 },
+  where: { ...typography.labelMedium, color: colors.onSurfaceVariant },
+  dim: { color: colors.onSurfaceVariant },
+  row: { flexDirection: "row", alignItems: "center", gap: gap.lg, paddingHorizontal: gap.lg, paddingVertical: gap.md, minHeight: 48 },
+  child: { paddingLeft: CHILD, paddingTop: gap.xs },
+  nested: { paddingHorizontal: gap.md, paddingVertical: gap.sm },
+  nestedChild: { paddingLeft: NESTED_CHILD, paddingTop: 0 },
+  pressed: { backgroundColor: colors.surfaceContainerHigh },
+  nestedPressed: { backgroundColor: colors.surfaceContainerHighest },
+  splitOuter: { padding: gap.sm },
+  split: { borderRadius: shape.large, backgroundColor: colors.surfaceContainerHigh, overflow: "hidden", paddingBottom: gap.xs },
+  tabHead: { flexDirection: "row", alignItems: "center", gap: gap.sm, minHeight: 40, paddingHorizontal: gap.md, paddingTop: 10, paddingBottom: 2 },
+  tabName: { ...emphasized.titleSmall, color: colors.onSurfaceVariant, flexShrink: 1 },
+  text: { flex: 1, minWidth: 0, gap: 2 },
+  title: { ...typography.bodyLarge, color: colors.onSurface },
+  subTitle: { ...typography.bodyMedium, color: colors.onSurface },
+  msg: { ...typography.bodyMedium, color: colors.onSurfaceVariant },
+  path: { fontFamily: fonts.mono, fontSize: 13, letterSpacing: 0 },
+  blocked: { color: colors.error },
+  age: { ...typography.labelMedium, color: colors.onSurfaceVariant, fontVariant: ["tabular-nums"] },
+  swipe: { overflow: "hidden" },
   swipeAction: {
     position: "absolute",
     top: 0,
     bottom: 0,
     right: 0,
     left: 0,
-    borderRadius: radius.md,
-    backgroundColor: colors.blocked,
+    backgroundColor: colors.error,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: gap.xs,
-    paddingRight: gap.lg,
+    gap: gap.sm,
+    paddingRight: gap.xl,
   },
-  swipeText: { color: colors.onAccent, fontSize: 14, fontWeight: "700" },
-  swipeRow: { backgroundColor: colors.bg },
-  menuHead: { paddingHorizontal: 14, paddingBottom: gap.md, gap: 4 },
-  menuTitle: { color: colors.text, fontSize: 18, fontWeight: "700" },
-  menuMeta: { color: colors.muted, fontSize: 13 },
-  rename: { paddingHorizontal: 6, paddingBottom: gap.md, gap: gap.md },
+  swipeText: { ...typography.labelLarge, color: colors.onError },
+  swipeRow: { backgroundColor: colors.surfaceContainerLow },
+  swipeRowNested: { backgroundColor: colors.surfaceContainerHigh },
+  rename: { gap: gap.lg, paddingHorizontal: gap.sm },
 }));

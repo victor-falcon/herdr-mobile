@@ -77,7 +77,7 @@ export function SheetAction({
 }) {
   const colors = useColors();
   const styles = useStyles();
-  const [tl, tr, br, bl] = segmentCorners(position, OUTER, INNER);
+  const [tl, tr, br, bl] = segmentCorners(position, OUTER, INNER, "column");
   const ink = danger ? colors.error : colors.onSurface;
   return (
     <Pressable
