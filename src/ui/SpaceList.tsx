@@ -97,6 +97,7 @@ function branchesOf(items: TabItem[]): Branch[] {
     };
   });
 }
+
 export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Props) {
   const colors = useColors();
   const styles = useStyles();
@@ -310,12 +311,12 @@ function TabRows({ space, tab, actions }: { space: Space; tab: SpaceTab; actions
     if (item.kind === "mod")
       return <ModRow key={item.key} name={item.name} nested={split} onLongPress={() => actions.onMenu({ ...whole, title: item.name, sessions: [], scope: "pane", lead: "mod" })} />;
     const s = item.session;
-    const target = item.from ? sessionTarget(item.from.space, item.from.tab, item) : sessionTarget(space, own, item);
+    const target = item.from ? sessionTarget(item.from.space, ownTab(item.from.tab), item) : sessionTarget(space, own, item);
     // A row from another space says which, so it is still clear where it runs.
     const hint = item.from && item.from.space !== space && !item.sub ? item.from.space.name : null;
     const onPress = () => actions.onSelect(s);
     const onLongPress = () => actions.onMenu(target);
-    const name = item.from ? (isSplit(item.from.tab) ? null : item.from.tab.name) : split ? null : tab.name;
+    const name = item.from ? (isSplit(ownTab(item.from.tab)) ? null : item.from.tab.name) : split ? null : tab.name;
     return (
       <Swipe key={s.key} nested={split} onClose={() => actions.onClose(target)}>
         {s.terminal.status ? (
@@ -412,7 +413,7 @@ function useBranch(branch: Branch | undefined, nested: boolean) {
 }
 
 /** The space a row runs in, ahead of what it says. */
-function Supporting({ hint, text, style }: { hint?: string | null; text: string | null; style?: StyleProp<TextStyle> }) {
+function Supporting({ hint, text, style }: { hint?: string | null; text?: string | null; style?: StyleProp<TextStyle> }) {
   const styles = useStyles();
   if (!hint && !text) return null;
   return (
@@ -445,7 +446,7 @@ function TerminalRow({ session, name, nested = false, branch, hint, onPress, onL
         <Text style={branch?.depth ? styles.subTitle : styles.title} numberOfLines={1}>
           {title}
         </Text>
-        {hint ? <Supporting hint={hint} text={null} /> : t.cwd ? <Supporting text={shortPath(t.cwd)} style={styles.path} /> : null}
+        {hint ? <Supporting hint={hint} /> : <Supporting text={t.cwd ? shortPath(t.cwd) : null} style={styles.path} />}
       </View>
     </Pressable>
   );

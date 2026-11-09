@@ -126,3 +126,14 @@ test("child spaces nest two deep at most; deeper ones get their row back", () =>
   expect(rows(byId(list, "s0"))).toEqual(["mac:t0", "  mac:t1 <s1/tb1>", "    mac:t2 <s2/tb2>"]);
   expect(rows(byId(list, "s3"))).toEqual(["mac:t3"]);
 });
+
+test("inside a child space, a tab launched from another of its tabs hangs under that tab's agent", () => {
+  const docs = { mac: doc({ id: "sp_main", name: "main", tabs: [tab("tb1", "t1")] }, { id: "sp_wt", name: "feature", tabs: [tab("tb2", "t2"), tab("tb3", "t3")] }) };
+  const sessions = [
+    session("t1", { space: "sp_main", tab: "tb1" }),
+    session("t2", { space: "sp_wt", tab: "tb2", launcher: "mac:t1" }),
+    session("t3", { space: "sp_wt", tab: "tb3", launcher: "mac:t2" }),
+  ];
+  const { spaces: list } = spaces(docs, targets, sessions);
+  expect(rows(byId(list, "sp_main"))).toEqual(["mac:t1", "  mac:t2 <sp_wt/tb2>", "    mac:t3 <sp_wt/tb3>"]);
+});
