@@ -30,6 +30,8 @@ export type Session = {
   key: string;
   /** The session that started this one, when there is one. */
   parentKey: string | null;
+  /** The agent that launched this one into its own space or tab (its `herdr.parent` label), when there is one. */
+  launcherKey: string | null;
   /** The machine that runs it. */
   machine: string;
   terminal: Terminal;
@@ -337,10 +339,13 @@ export class Fleet {
   private session(link: Link, t: Terminal): Session {
     const core = link.conn!.hello.core;
     const slash = t.address.indexOf("/");
+    // Written by the launching agent as an address on this terminal's own machine.
+    const launcher = t.labels?.["herdr.parent"] || null;
     if (slash < 0) {
       return {
         key: `${core.id}:${t.address}`,
         parentKey: t.parent ? this.keyFor(link, core.id, t.parent) : null,
+        launcherKey: launcher ? this.keyFor(link, core.id, launcher) : null,
         machine: core.name,
         terminal: t,
         linkId: link.config.id,
@@ -353,6 +358,7 @@ export class Fleet {
     return {
       key: via ? `${via.id}:${t.address.slice(slash + 1)}` : `${core.id}:${t.address}`,
       parentKey: t.parent ? this.keyFor(link, owner, t.parent) : null,
+      launcherKey: launcher ? this.keyFor(link, owner, launcher) : null,
       machine: via?.host || name,
       terminal: t,
       linkId: link.config.id,
