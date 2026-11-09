@@ -11,6 +11,7 @@ import { Avatar } from "../src/ui/Avatar";
 import { Button, Fab } from "../src/ui/Button";
 import { ButtonGroup, GroupButton } from "../src/ui/ButtonGroup";
 import { EmptyState } from "../src/ui/EmptyState";
+import { Card, Row } from "../src/ui/Group";
 import { IconButton } from "../src/ui/IconButton";
 import { InboxList } from "../src/ui/InboxList";
 import { explainError, linkColor } from "../src/ui/machine-display";
@@ -132,6 +133,27 @@ export default function Agents() {
           <InboxList groups={groups} showMachine={targets.length > 1} onSelect={open} />
         ) : (
           <SpaceList spaces={spaces} loose={loose} showMachine={targets.length > 1} onSelect={open} onStart={setStartIn} />
+        )}
+
+        {/* The machines and how each is doing, at the foot of the list as in the desktop's sidebar. */}
+        {mode === "spaces" && machines.length > 0 && !none && (
+          <Card>
+            <Row
+              label="Machines"
+              icon="server-outline"
+              hint={
+                <>
+                  {links.map((l, i) => (
+                    <Text key={l.config.id}>
+                      {i > 0 ? "   " : ""}
+                      <Text style={{ color: linkColor(l.state, colors) }}>●</Text> {l.config.name}
+                    </Text>
+                  ))}
+                </>
+              }
+              onPress={() => router.push("/machines")}
+            />
+          </Card>
         )}
 
         {machines.length > 0 && connected && none && mode === "inbox" && <EmptyState icon="file-tray-outline" title="No agents running" text="Tap Open project to start one." />}

@@ -21,6 +21,8 @@ export type Space = {
   name: string;
   folder: string;
   factory: boolean;
+  /** Its number in the desktop's sidebar on its machine (1, 2, …), or null when the desktop doesn't list it. */
+  index: number | null;
   agents: Session[];
   tabs: SpaceTab[];
   /** The agent, in another space, this space's agents were launched by: its tabs hang under that agent and it has no row of its own. */
@@ -144,15 +146,18 @@ export function spaces(docs: Record<string, HerdrDoc | null>, targets: Target[],
     const key = `${target.coreId}:${id}`;
     let space = out.get(key);
     if (!space) {
-      space = { key, target, id, name: name || folderName(folder), folder, factory: id.startsWith("factory-"), agents: [], tabs: [], nestedUnder: null };
+      space = { key, target, id, name: name || folderName(folder), folder, factory: id.startsWith("factory-"), index: null, agents: [], tabs: [], nestedUnder: null };
       out.set(key, space);
     }
     return space;
   };
 
   for (const target of targets) {
+    let n = 0;
     for (const s of docs[target.coreId]?.spaces ?? []) {
-      if (s.id) make(target, s.id, s.name ?? "", s.folder ?? "");
+      if (!s.id) continue;
+      const space = make(target, s.id, s.name ?? "", s.folder ?? "");
+      if (!space.factory && space.index === null) space.index = ++n;
     }
   }
 
@@ -191,8 +196,14 @@ export function spaces(docs: Record<string, HerdrDoc | null>, targets: Target[],
   for (const space of out.values()) space.tabs = tabsOf(space, docTabs.get(space.key) ?? [], sessions, byKey);
   nestLaunched([...out.values()]);
 
+  // The desktop's order: its sidebar's spaces by number, machine by machine, then the ones it doesn't list, factories last.
+  const machine = (sp: Space) => targets.findIndex((t) => t.coreId === sp.target.coreId);
   const list = [...out.values()].sort(
-    (a, b) => Number(a.factory) - Number(b.factory) || a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),
+    (a, b) =>
+      Number(a.factory) - Number(b.factory) ||
+      machine(a) - machine(b) ||
+      (a.index ?? Infinity) - (b.index ?? Infinity) ||
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),
   );
   return { spaces: list, loose };
 }
@@ -368,7 +379,7 @@ function launcherOf(s: Session, agents: Map<string, unknown>): string | null {
   return null;
 }
 
-function summarize(subs: Session[]): SubSummary | null {
+export function summarize(subs: Session[]): SubSummary | null {
   if (!subs.length) return null;
   const status = BY_SUB_RANK.find((st) => subs.some((s) => inboxStatus(s) === st))!;
   return { status, n: subs.filter((s) => inboxStatus(s) === status).length, total: subs.length };

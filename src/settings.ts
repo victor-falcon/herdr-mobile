@@ -18,6 +18,8 @@ export type Settings = {
   /** The agents to offer, in order; the first is the one a new project starts. */
   agents: Agent[];
   homeMode: HomeMode;
+  /** Spaces folded to one line on the Spaces list, by space key. */
+  collapsed: string[];
 };
 
 const DEFAULTS: Settings = {
@@ -30,6 +32,7 @@ const DEFAULTS: Settings = {
     { name: "Claude", command: "claude" },
   ],
   homeMode: "spaces",
+  collapsed: [],
 };
 const KEY = "settings.v1";
 

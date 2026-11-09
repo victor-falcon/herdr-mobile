@@ -50,6 +50,22 @@ const rows = (sp: Space | undefined) =>
 const shown = (list: Space[]) => list.filter((s) => !s.nestedUnder);
 const byId = (list: Space[], id: string) => list.find((s) => s.id === id);
 
+test("spaces keep the desktop's order and number on each machine; ones it doesn't list come after, factories last", () => {
+  const docs = {
+    mac: doc({ id: "sp_z", name: "zeta", tabs: [] }, { id: "factory-x", name: "factory", tabs: [] }, { id: "sp_a", name: "alpha", tabs: [] }),
+    mini: doc({ id: "sp_m", name: "mini one", tabs: [] }),
+  };
+  const sessions = [session("t1", { space: "sp_new", tab: "tb1" })];
+  const { spaces: list } = spaces(docs, targets, sessions);
+  expect(list.map((s) => [s.id, s.index])).toEqual([
+    ["sp_z", 1],
+    ["sp_a", 2],
+    ["sp_new", null],
+    ["sp_m", 1],
+    ["factory-x", null],
+  ]);
+});
+
 test("a space whose agent another space's agent launched hangs under that agent", () => {
   const docs = { mac: doc({ id: "sp_main", name: "main", tabs: [tab("tb1", "t1")] }, { id: "sp_wt", name: "feature", tabs: [tab("tb2", "t2"), tab("tb3", "t3")] }) };
   const sessions = [session("t1", { space: "sp_main", tab: "tb1" }), session("t2", { space: "sp_wt", tab: "tb2", launcher: "mac:t1" }), session("t3", { space: "sp_wt", tab: "tb3", agent: false })];
@@ -78,7 +94,7 @@ test("a space whose launcher is gone keeps its own row", () => {
   const docs = { mac: doc({ id: "sp_main", name: "main", tabs: [tab("tb1", "t1")] }, { id: "sp_wt", name: "feature", tabs: [tab("tb2", "t2")] }) };
   const sessions = [session("t1", { space: "sp_main", tab: "tb1", state: "finished" }), session("t2", { space: "sp_wt", tab: "tb2", launcher: "mac:t1" })];
   const { spaces: list } = spaces(docs, targets, sessions);
-  expect(shown(list).map((s) => s.id)).toEqual(["sp_wt", "sp_main"]);
+  expect(shown(list).map((s) => s.id)).toEqual(["sp_main", "sp_wt"]);
   expect(byId(list, "sp_wt")!.nestedUnder).toBeNull();
   expect(rows(byId(list, "sp_wt"))).toEqual(["mac:t2"]);
 });

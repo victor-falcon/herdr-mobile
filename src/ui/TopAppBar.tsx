@@ -48,6 +48,7 @@ export function LargeTopAppBar({
 export function TopAppBar({
   title,
   subtitle,
+  lead,
   back = true,
   onBack = goBack,
   actions,
@@ -56,6 +57,8 @@ export function TopAppBar({
 }: {
   title: string;
   subtitle?: string;
+  /** Before the title, such as the agent's avatar. */
+  lead?: ReactNode;
   back?: boolean;
   onBack?: () => void;
   actions?: ReactNode;
@@ -69,7 +72,8 @@ export function TopAppBar({
     <View style={[styles.bar, { paddingTop: insets.top }, style]}>
       <View style={[styles.row, styles.small]}>
         {back ? <IconButton icon="arrow-back" label="Back" onPress={onBack} /> : null}
-        <View style={[styles.flex, !back && styles.noBack]}>
+        {lead ? <View style={[styles.lead, !back && styles.noBack]}>{lead}</View> : null}
+        <View style={[styles.flex, !back && !lead && styles.noBack]}>
           <Text style={[styles.title, titleStyle]} numberOfLines={1} accessibilityRole="header">
             {title}
           </Text>
@@ -91,6 +95,7 @@ const useStyles = makeStyles((colors) => ({
   small: { gap: space.xs },
   flex: { flex: 1, minWidth: 0 },
   noBack: { paddingLeft: space.md },
+  lead: { paddingRight: space.sm },
   headline: { ...emphasized.headlineMedium, color: colors.onSurface, paddingHorizontal: space.xl, paddingBottom: space.lg },
   title: { ...emphasized.titleLarge, color: colors.onSurface },
   subtitle: { ...typography.labelMedium, color: colors.onSurfaceVariant },
