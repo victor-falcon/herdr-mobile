@@ -1,7 +1,7 @@
 // xterm.js in a WebView, fed by a herdr-core attach stream. Acknowledges bytes
 // only after xterm has drawn them, so a slow phone gets a repaint instead of
 // an endless backlog.
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Linking, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { toBase64, utf8Encode } from "../hc/bytes";
@@ -63,7 +63,8 @@ export type TerminalHandle = {
   scrollToBottom: () => void;
 };
 
-export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView({ conn, address, cols, rows, pid, mode, fontSize, onTap, onSwipeBack }, ref) {
+// Memoized: the screen around it re-renders on every fleet update, and the terminal need not.
+export const TerminalView = memo(forwardRef<TerminalHandle, Props>(function TerminalView({ conn, address, cols, rows, pid, mode, fontSize, onTap, onSwipeBack }, ref) {
   const colors = useColors();
   const styles = useStyles();
   const web = useRef<WebView>(null);
@@ -220,7 +221,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       )}
     </View>
   );
-});
+}));
 
 function describe(r: { reason?: string; exit_code?: number | null }): string {
   if (r.reason === "exited") return `Exited${r.exit_code != null ? ` with code ${r.exit_code}` : ""}`;

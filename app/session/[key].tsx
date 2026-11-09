@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Stack, router, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet } from "../../src/fleet-store";
@@ -42,9 +42,14 @@ export default function SessionScreen() {
   // Its space, and the other panes of its tab, as the desktop's tab bar shows them.
   const ownPanes = (items: TabItem[]) =>
     items.flatMap((i) => (i.kind === "session" && !i.sub && i.depth === 0 && !i.from ? [i.session] : []));
-  const { spaces } = spacesOf(docs, fleet.targets(), sessions);
-  const home = spaces.find((sp) => sp.agents.some((a) => a.key === key) || sp.tabs.some((tb) => ownPanes(tb.items).some((p) => p.key === key)));
-  const panes = home?.tabs.map((tb) => ownPanes(tb.items)).find((ps) => ps.some((p) => p.key === key)) ?? [];
+  // Worked out only when the fleet changes, so a busy fleet does not hold up the terminal's first screen.
+  const { home, panes } = useMemo(() => {
+    const { spaces } = spacesOf(docs, fleet.targets(), sessions);
+    const home = spaces.find((sp) => sp.agents.some((a) => a.key === key) || sp.tabs.some((tb) => ownPanes(tb.items).some((p) => p.key === key)));
+    const panes = home?.tabs.map((tb) => ownPanes(tb.items)).find((ps) => ps.some((p) => p.key === key)) ?? [];
+    return { home, panes };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docs, sessions, key]);
   // A still dot for a pane's state: nothing animates beside the terminal's WebView.
   const paneColor = (s: Session) => {
     const st = s.terminal.status?.state;
@@ -52,7 +57,8 @@ export default function SessionScreen() {
   };
   const switchTo = (s: Session) => router.replace({ pathname: "/session/[key]", params: { key: s.key } });
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace("/")), []);
+  const openKeyboard = useCallback(() => input.current?.openKeyboard(), []);
 
   const seen = useRef(false);
   const title = useRef("Session");
@@ -111,7 +117,6 @@ export default function SessionScreen() {
       )}
       {t && route ? (
         <TerminalView
-          key={key}
           ref={terminal}
           conn={route.conn}
           address={route.address}
@@ -120,7 +125,7 @@ export default function SessionScreen() {
           pid={t.pid}
           mode={view}
           fontSize={settings.fontSize}
-          onTap={() => input.current?.openKeyboard()}
+          onTap={openKeyboard}
           onSwipeBack={back}
         />
       ) : (
@@ -129,7 +134,7 @@ export default function SessionScreen() {
         </View>
       )}
       {live && route ? (
-        <TerminalInput key={key} ref={input} sessionKey={key} route={route} terminal={terminal} keyboardHeight={keyboard} />
+        <TerminalInput ref={input} sessionKey={key} route={route} terminal={terminal} keyboardHeight={keyboard} />
       ) : (
         <View style={{ height: Math.max(insets.bottom, space.sm) }} />
       )}
