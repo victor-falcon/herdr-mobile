@@ -75,13 +75,16 @@ function sessionTarget(space: Space, tab: SpaceTab, item: Extract<TabItem, { kin
 
 /** What an agent's row closes and renames wherever it is listed: the same as its row in `space` on the Spaces list. */
 export function agentTarget(s: Session, space: Space | null): RowTarget {
-  for (const tab of space?.tabs ?? []) {
+  const alone: RowTarget = { title: agentTitle(s), space: null, tab: null, sessions: [s], scope: "pane", lead: s };
+  if (!space) return alone;
+  // A session is listed once in its space's tabs: in its own tab, or hanging under its launcher (`from`).
+  for (const tab of space.tabs) {
     for (const item of tab.items) {
       if (item.kind !== "session" || item.session.key !== s.key) continue;
-      return item.from ? sessionTarget(item.from.space, ownTab(item.from.tab), item) : sessionTarget(space!, ownTab(tab), item);
+      return item.from ? sessionTarget(item.from.space, ownTab(item.from.tab), item) : sessionTarget(space, ownTab(tab), item);
     }
   }
-  return { title: agentTitle(s), space: null, tab: null, sessions: [s], scope: "pane", lead: s };
+  return alone;
 }
 
 /** How a row joins the tree drawn down the left of a tab: one entry per level above it, true where a line runs on past it. */
@@ -438,15 +441,16 @@ function useBranch(branch: Branch | undefined, nested: boolean) {
   return { style, lines, size: avatarSize(depth) };
 }
 
-/** The space a row runs in, ahead of what it says. */
-function Supporting({ hint, text, style }: { hint?: string | null; text?: string | null; style?: StyleProp<TextStyle> }) {
+/** The space a row runs in, ahead of what it says; `textFirst` puts what it says ahead, so a long hint can't cut it off. */
+function Supporting({ hint, text, style, textFirst }: { hint?: string | null; text?: string | null; style?: StyleProp<TextStyle>; textFirst?: boolean }) {
   const styles = useStyles();
   if (!hint && !text) return null;
+  const where = hint ? <Text style={styles.hint}>{hint}</Text> : null;
   return (
     <Text style={[styles.msg, style]} numberOfLines={1}>
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {textFirst ? text : where}
       {hint && text ? " · " : null}
-      {text}
+      {textFirst ? where : text}
     </Text>
   );
 }
@@ -495,7 +499,8 @@ function ModRow({ name, nested, onLongPress }: { name: string; nested: boolean; 
   );
 }
 
-export function AgentRow({ session, nested = false, branch, hint, onPress, onLongPress }: RowProps & { session: Session }) {
+/** `urgentFirst`: an agent that needs you says why ahead of the hint. */
+export function AgentRow({ session, nested = false, branch, hint, urgentFirst, onPress, onLongPress }: RowProps & { session: Session; urgentFirst?: boolean }) {
   const styles = useStyles();
   const tree = useBranch(branch, nested);
   const sub = (branch?.depth ?? 0) > 0;
@@ -516,7 +521,7 @@ export function AgentRow({ session, nested = false, branch, hint, onPress, onLon
         <Text style={sub ? styles.subTitle : styles.title} numberOfLines={1}>
           {title}
         </Text>
-        <Supporting hint={hint} text={msg} style={blocked && styles.blocked} />
+        <Supporting hint={hint} text={msg} style={blocked && styles.blocked} textFirst={urgentFirst && blocked} />
       </View>
       <Text style={styles.age}>{ago(t.status_ms ?? t.created_ms)}</Text>
     </Pressable>

@@ -105,8 +105,11 @@ const STATUS = {
   dark: { working: "#E3B341", workingContainer: "#4A3800", done: "#56D364", doneContainer: "#1B4D27", backdrop: "rgba(0,0,0,0.5)" },
 };
 
-/** `a` blended toward `b` by `t` (0..1); both #RRGGBB. */
-export function mix(a: string, b: string, t: number): string {
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** `a` blended toward `b` by `t` (0..1); both #RRGGBB. Any other format leaves `a` as it is. */
+function mix(a: string, b: string, t: number): string {
+  if (!HEX.test(a) || !HEX.test(b)) return a;
   const ch = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
   const out = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t));
   return `#${out.map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;

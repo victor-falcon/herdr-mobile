@@ -1,5 +1,5 @@
 // Grouped rows, like a settings list: a section label in primary over a card
-// (corner 20, surfaceContainerLow) whose rows are split by subtle inset dividers.
+// (corner 20, surfaceContainerLow) whose rows are split by inset dividers.
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Children, type ReactNode } from "react";
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
@@ -22,7 +22,8 @@ export function Section({ title, children, style }: { title?: string; children: 
 
 /**
  * The card a Section draws, for grouped rows without a label. `inset` moves the
- * dividers' start in to line up with the rows' text, past a leading avatar.
+ * dividers' start in to line up with the rows' text, past a leading avatar, and
+ * draws them in a quieter tone, for lists of avatar rows.
  */
 export function Card({ children, style, inset }: { children: ReactNode; style?: StyleProp<ViewStyle>; inset?: number }) {
   const styles = useStyles();
@@ -31,7 +32,7 @@ export function Card({ children, style, inset }: { children: ReactNode; style?: 
     <View style={[styles.card, style]}>
       {items.map((child, i) => (
         <View key={i}>
-          {i > 0 ? <View style={[styles.divider, inset !== undefined && { marginLeft: inset }]} /> : null}
+          {i > 0 ? <View style={[styles.divider, inset === undefined ? null : [styles.subtle, { marginLeft: inset }]]} /> : null}
           {child}
         </View>
       ))}
@@ -101,7 +102,8 @@ const useStyles = makeStyles((colors) => ({
   section: { gap: space.sm },
   title: { ...emphasized.titleSmall, color: colors.primary, paddingHorizontal: space.xs },
   card: { backgroundColor: colors.surfaceContainerLow, borderRadius: shape.largeIncreased, overflow: "hidden" },
-  divider: { height: 1, backgroundColor: colors.outlineVariantSubtle, marginHorizontal: space.lg },
+  divider: { height: 1, backgroundColor: colors.outlineVariant, marginHorizontal: space.lg },
+  subtle: { backgroundColor: colors.outlineVariantSubtle },
   row: { flexDirection: "row", alignItems: "center", gap: space.lg, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 56 },
   top: { alignItems: "flex-start" },
   iconTop: { marginTop: 2 },

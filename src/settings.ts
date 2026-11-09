@@ -5,6 +5,9 @@ import type { TerminalMode } from "./terminal/TerminalView";
 /** A program the + sheet offers, run in the space's folder. */
 export type Agent = { name: string; command: string };
 
+/** What the home screen lists: spaces with their tabs, or every agent most urgent first. */
+export type HomeMode = "spaces" | "inbox";
+
 export type Settings = {
   fontSize: number;
   defaultMode: TerminalMode;
@@ -14,8 +17,7 @@ export type Settings = {
   projectDirs: string[];
   /** The agents to offer, in order; the first is the one a new project starts. */
   agents: Agent[];
-  /** What the home screen lists: spaces with their tabs, or every agent most urgent first. */
-  homeMode: "spaces" | "inbox";
+  homeMode: HomeMode;
 };
 
 const DEFAULTS: Settings = {

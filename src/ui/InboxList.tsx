@@ -33,7 +33,7 @@ export function InboxList({ groups, showMachine, onSelect }: Props) {
               const where = [showMachine ? (space?.target.label ?? session.machine) : "", space?.name ?? ""].filter(Boolean).join(" · ") || null;
               return (
                 <Swipe key={session.key} onClose={() => rows.close(target)}>
-                  <AgentRow session={session} hint={where} onPress={() => onSelect(session)} onLongPress={() => rows.open(target)} />
+                  <AgentRow session={session} hint={where} urgentFirst onPress={() => onSelect(session)} onLongPress={() => rows.open(target)} />
                 </Swipe>
               );
             })}

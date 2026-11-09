@@ -312,9 +312,9 @@ export type InboxAgent = { session: Session; space: Space | null };
 export type InboxGroupKey = "needs-you" | "done" | "working" | "idle";
 export type InboxGroup = { key: InboxGroupKey; label: string; agents: InboxAgent[] };
 
-/** The inbox's groups, most urgent first, as the desktop's sidebar has them. */
-const INBOX_GROUPS: { key: InboxGroupKey; label: string }[] = [
-  { key: "needs-you", label: "Needs you" },
+/** The inbox's groups, most urgent first, as the desktop's sidebar has them. `oldestFirst`: who has waited longest leads. */
+const INBOX_GROUPS: { key: InboxGroupKey; label: string; oldestFirst?: boolean }[] = [
+  { key: "needs-you", label: "Needs you", oldestFirst: true },
   { key: "done", label: "Done" },
   { key: "working", label: "Working" },
   { key: "idle", label: "Idle" },
@@ -341,9 +341,9 @@ function inboxGroupOf(s: Session): InboxGroupKey {
  */
 export function inbox({ spaces: list, loose }: { spaces: Space[]; loose: Session[] }): InboxGroup[] {
   const all: InboxAgent[] = [...list.flatMap((space) => space.agents.map((session) => ({ session, space }))), ...loose.map((session) => ({ session, space: null }))];
-  return INBOX_GROUPS.map(({ key, label }) => {
+  return INBOX_GROUPS.map(({ key, label, oldestFirst }) => {
     const agents = all.filter((a) => inboxGroupOf(a.session) === key);
-    const order = key === "needs-you" ? 1 : -1;
+    const order = oldestFirst ? 1 : -1;
     agents.sort((a, b) => order * (changed(a.session) - changed(b.session)) || a.session.key.localeCompare(b.session.key));
     return { key, label, agents };
   }).filter((g) => g.agents.length > 0);

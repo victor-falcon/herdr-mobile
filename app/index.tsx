@@ -5,7 +5,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet, useMachines } from "../src/fleet-store";
 import type { Session } from "../src/hc/fleet";
-import { updateSettings, useSettings } from "../src/settings";
+import { updateSettings, useSettings, type HomeMode } from "../src/settings";
 import { inbox, spaces as spacesOf, type Space } from "../src/spaces";
 import { Avatar } from "../src/ui/Avatar";
 import { Button, Fab } from "../src/ui/Button";
@@ -26,6 +26,8 @@ export default function Agents() {
   const styles = useStyles();
   const { links, sessions, docs } = useFleet();
   const { machines, loaded } = useMachines();
+  const mode = useSettings().homeMode;
+  const setMode = (homeMode: HomeMode) => void updateSettings({ homeMode });
   const [picking, setPicking] = useState(false);
   const [startIn, setStartIn] = useState<Space | null>(null);
   const insets = useSafeAreaInsets();
@@ -41,7 +43,6 @@ export default function Agents() {
   const targets = fleet.targets();
   const listed = spacesOf(docs, targets, sessions);
   const { spaces, loose } = listed;
-  const mode = useSettings().homeMode;
   const groups = mode === "inbox" ? inbox(listed) : [];
   const none = mode === "inbox" ? groups.length === 0 : spaces.length === 0 && loose.length === 0;
   const install = () => {
@@ -60,9 +61,9 @@ export default function Agents() {
         }
       />
       {machines.length > 0 && (
-        <ButtonGroup style={styles.mode} accessibilityLabel="Show">
-          <GroupButton label="Spaces" icon="folder-outline" selected={mode === "spaces"} flex={1} onPress={() => void updateSettings({ homeMode: "spaces" })} />
-          <GroupButton label="Inbox" icon="file-tray-outline" selected={mode === "inbox"} flex={1} onPress={() => void updateSettings({ homeMode: "inbox" })} />
+        <ButtonGroup style={styles.mode} accessibilityLabel="Home view">
+          <GroupButton label="Spaces" icon="folder-outline" selected={mode === "spaces"} flex={1} onPress={() => setMode("spaces")} />
+          <GroupButton label="Inbox" icon="file-tray-outline" selected={mode === "inbox"} flex={1} onPress={() => setMode("inbox")} />
         </ButtonGroup>
       )}
       <ScrollView
@@ -133,7 +134,7 @@ export default function Agents() {
           <SpaceList spaces={spaces} loose={loose} showMachine={targets.length > 1} onSelect={open} onStart={setStartIn} />
         )}
 
-        {machines.length > 0 && connected && none && mode === "inbox" && <EmptyState icon="file-tray-outline" title="No agents running" text="Agents you start show up here, most urgent first." />}
+        {machines.length > 0 && connected && none && mode === "inbox" && <EmptyState icon="file-tray-outline" title="No agents running" text="Tap Open project to start one." />}
         {machines.length > 0 && connected && none && mode === "spaces" && <EmptyState icon="folder-open-outline" title="No spaces yet" text="Tap Open project to start one." />}
       </ScrollView>
 

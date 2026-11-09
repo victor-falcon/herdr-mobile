@@ -1,4 +1,4 @@
-// How the Spaces list hangs what an agent launched (`herdr.parent`) under it.
+// How the Spaces list hangs what an agent launched (`herdr.parent`) under it, and how the inbox groups agents.
 import { expect, test } from "vitest";
 import type { HerdrDoc, HerdrTab, Session, Target } from "../src/hc/fleet";
 import { inbox, spaces, type Space, type TabItem } from "../src/spaces";
