@@ -536,6 +536,7 @@ function ModRow({ name, nested, onLongPress }: { name: string; nested: boolean; 
 
 /**
  * `urgentFirst`: an agent that needs you says why ahead of the hint.
+ * `changedAt`: the time the age counts from, when not the agent's own last change (the inbox row's sort time).
  * `trailing` sits under the time, at the end of the second line (the inbox's subagents chip).
  */
 export function AgentRow({
@@ -545,9 +546,10 @@ export function AgentRow({
   hint,
   urgentFirst,
   trailing,
+  changedAt,
   onPress,
   onLongPress,
-}: RowProps & { session: Session; urgentFirst?: boolean; trailing?: ReactNode }) {
+}: RowProps & { session: Session; urgentFirst?: boolean; trailing?: ReactNode; changedAt?: number }) {
   const styles = useStyles();
   const tree = useBranch(branch, nested);
   const sub = (branch?.depth ?? 0) > 0;
@@ -574,7 +576,7 @@ export function AgentRow({
       </View>
       <View style={styles.trailing}>
         <View style={styles.trailingTop}>
-          <Text style={styles.age}>{ago(t.status_ms ?? t.created_ms)}</Text>
+          <Text style={styles.age}>{ago(changedAt ?? t.status_ms ?? t.created_ms)}</Text>
           <StatusMark session={session} />
         </View>
         {trailing}
