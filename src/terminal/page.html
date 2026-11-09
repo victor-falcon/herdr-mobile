@@ -294,6 +294,8 @@
         mode = msg.mode;
         document.body.className = mode;
         if (msg.cols && msg.rows) size = { cols: msg.cols, rows: msg.rows };
+        // Fit always reports its size, even one the terminal already has: the app waits for it to attach.
+        if (mode === "fit") size = { cols: 0, rows: 0 };
         layout();
       } else if (msg.type === "size") {
         if (mode === "view") { size = { cols: msg.cols, rows: msg.rows }; layout(); }
