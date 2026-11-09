@@ -169,15 +169,15 @@ test("the inbox groups agents by urgency and leaves out empty groups and plain t
     session("t5", { status: "working", ms: 40 }),
     session("t6", { space: "sp_a", status: "done", state: "finished" }),
   ];
-  expect(groups(docs, sessions)).toEqual(["Needs you: mac:t2@sp_a mini:t4@sp_b", "Working: mac:t5@-", "Idle: mac:t1@sp_a"]);
+  expect(groups(docs, sessions)).toEqual(["Needs you: mini:t4@sp_b mac:t2@sp_a", "Working: mac:t5@-", "Idle: mac:t1@sp_a"]);
 });
 
-test("in the inbox, who needs you and waited longest leads; elsewhere the latest change does", () => {
+test("in the inbox, the latest change leads every group, Needs you included", () => {
   const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1", "t2", "t3", "t4", "t5", "t6")] }) };
   const s = (address: string, status: string, ms?: number) => session(address, { space: "sp_a", tab: "tb1", status, ms });
   // t6 has no status_ms: its creation (1) counts.
   const sessions = [s("t1", "blocked", 50), s("t2", "blocked", 10), s("t3", "done", 10), s("t4", "done", 50), s("t5", "working", 30), s("t6", "working")];
-  expect(groups(docs, sessions)).toEqual(["Needs you: mac:t2@sp_a mac:t1@sp_a", "Done: mac:t4@sp_a mac:t3@sp_a", "Working: mac:t5@sp_a mac:t6@sp_a"]);
+  expect(groups(docs, sessions)).toEqual(["Needs you: mac:t1@sp_a mac:t2@sp_a", "Done: mac:t4@sp_a mac:t3@sp_a", "Working: mac:t5@sp_a mac:t6@sp_a"]);
 });
 
 const subsOf = (docs: Record<string, HerdrDoc>, sessions: Session[], key: string) => {
@@ -220,20 +220,69 @@ test("agents that launched each other in a loop keep their own rows", () => {
   expect(groups(docs, sessions)).toEqual(["Working: mac:t3@sp_a mac:t2@sp_a mac:t1@sp_a"]);
 });
 
-test("a parent moves to its most urgent subagent's group when that one outranks its own", () => {
-  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1", "t2")] }) };
+// A row stands for its whole tree: needs you if any of it is blocked, else working if any of it works, else the parent's own status.
+test.each([
+  ["done", ["working"], "Working"],
+  ["working", ["done"], "Working"],
+  ["working", ["blocked"], "Needs you"],
+  ["done", ["error"], "Needs you"],
+  ["blocked", ["working"], "Needs you"],
+  ["idle", ["done"], "Idle"],
+  ["done", ["idle", "done"], "Done"],
+  ["idle", [], "Idle"],
+])("a %s parent with %j subagents sits in %s", (parent, subs, group) => {
+  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1")] }) };
   const sessions = [
-    // A working parent with a blocked subagent needs you.
-    session("t1", { space: "sp_a", tab: "tb1", status: "working", ms: 10 }),
-    session("t3", { parent: "mac:t1", status: "error", ms: 11 }),
-    session("t4", { parent: "mac:t1", status: "working", ms: 12 }),
-    // A done parent with a working subagent stays in Done: working ranks lower.
-    session("t2", { space: "sp_a", tab: "tb1", status: "done", ms: 20 }),
-    session("t5", { parent: "mac:t2", status: "working", ms: 21 }),
+    session("t1", { space: "sp_a", tab: "tb1", status: parent, ms: 10 }),
+    ...subs.map((status, i) => session(`s${i}`, { parent: "mac:t1", status, ms: 20 + i })),
   ];
-  expect(groups(docs, sessions)).toEqual(["Needs you: mac:t1@sp_a", "Done: mac:t2@sp_a"]);
-  expect(subsOf(docs, sessions, "mac:t1")).toEqual({ subs: ["mac:t3", "mac:t4"], summary: { status: "blocked", n: 1, total: 2 } });
-  expect(subsOf(docs, sessions, "mac:t2").summary).toEqual({ status: "working", n: 1, total: 1 });
+  expect(groups(docs, sessions)).toEqual([`${group}: mac:t1@sp_a`]);
+});
+
+test("a subagent's subagent counts toward the tree too", () => {
+  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1")] }) };
+  const sessions = [
+    session("t1", { space: "sp_a", tab: "tb1", status: "done", ms: 10 }),
+    session("s1", { parent: "mac:t1", status: "done", ms: 20 }),
+    session("s2", { parent: "mac:s1", status: "blocked", ms: 30 }),
+  ];
+  expect(groups(docs, sessions)).toEqual(["Needs you: mac:t1@sp_a"]);
+  // The chip still reads the most urgent subagent.
+  expect(subsOf(docs, sessions, "mac:t1")).toEqual({ subs: ["mac:s2", "mac:s1"], summary: { status: "blocked", n: 1, total: 2 } });
+});
+
+test("a row sorts by the change of the member that put it in its group", () => {
+  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10")] }) };
+  const p = (address: string, status: string, ms: number) => session(address, { space: "sp_a", tab: "tb1", status, ms });
+  const sub = (address: string, parent: string, status: string, ms: number) => session(address, { parent: `mac:${parent}`, status, ms });
+  const sessions = [
+    // Needs you, by the latest change among the blocked members: p3 60, p2 50, p1 5.
+    p("p1", "working", 100),
+    sub("s1", "p1", "blocked", 5),
+    p("p2", "blocked", 50),
+    p("p3", "blocked", 10),
+    sub("s3", "p3", "blocked", 60),
+    // Working, by the latest change among the working members: p6 40, p5 30, p4 20.
+    p("p4", "done", 100),
+    sub("s4", "p4", "working", 20),
+    p("p5", "working", 30),
+    sub("s5", "p5", "done", 200),
+    p("p6", "working", 5),
+    sub("s6", "p6", "working", 40),
+    // Done and Idle, by the parent's own change: a subagent's later change does not count.
+    p("p7", "done", 15),
+    sub("s7", "p7", "idle", 300),
+    p("p8", "done", 25),
+    p("p9", "idle", 5),
+    sub("s9", "p9", "done", 400),
+    p("p10", "idle", 8),
+  ];
+  expect(groups(docs, sessions)).toEqual([
+    "Needs you: mac:p3@sp_a mac:p2@sp_a mac:p1@sp_a",
+    "Done: mac:p8@sp_a mac:p7@sp_a",
+    "Working: mac:p6@sp_a mac:p5@sp_a mac:p4@sp_a",
+    "Idle: mac:p10@sp_a mac:p9@sp_a",
+  ]);
 });
 
 test("a parent's subagents read most urgent first: blocked, working, done, idle, then the latest change", () => {
