@@ -32,7 +32,7 @@ export const KEY_ROWS: BarKey[][] = [
   [
     { key: "keyboard", label: "keyboard" },
     { key: "paste", label: "paste" },
-    { key: "1", label: "1" },
+    { key: "/", label: "/", spoken: "Slash" },
     { key: "ctrl+enter", label: "^⏎", spoken: "Control enter" },
     { key: "shift+enter", label: "⇧⏎", spoken: "Shift enter" },
     { key: "left", label: "←", arrow: true },
@@ -76,7 +76,7 @@ export function keyBytes(key: KeyName | string, appCursor: boolean): string {
   }
   const ctrl = /^ctrl\+([a-z])$/.exec(key);
   if (ctrl) return String.fromCharCode(ctrl[1].charCodeAt(0) - 96);
-  return key; // a printable key, like "1" or "y"
+  return key; // a printable key, like "/" or "y"
 }
 
 /**
