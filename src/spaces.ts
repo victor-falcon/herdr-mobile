@@ -191,7 +191,9 @@ export function spaces(docs: Record<string, HerdrDoc | null>, targets: Target[],
   for (const space of out.values()) space.tabs = tabsOf(space, docTabs.get(space.key) ?? [], sessions, byKey);
   nestLaunched([...out.values()]);
 
-  const list = [...out.values()].sort((a, b) => Number(a.factory) - Number(b.factory) || a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }));
+  const list = [...out.values()].sort(
+    (a, b) => Number(a.factory) - Number(b.factory) || a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),
+  );
   return { spaces: list, loose };
 }
 
