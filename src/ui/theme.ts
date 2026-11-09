@@ -43,6 +43,8 @@ export type Colors = Omit<MaterialRoles, "surface"> & {
   appBg: string;
   /** Behind sheets and dialogs. */
   backdrop: string;
+  /** outlineVariant blended halfway into surfaceContainerLow: dividers and tree lines on a card, barely there in light and dark. */
+  outlineVariantSubtle: string;
 };
 
 // Material 3's baseline scheme, for phones without dynamic color.
@@ -103,6 +105,16 @@ const STATUS = {
   dark: { working: "#E3B341", workingContainer: "#4A3800", done: "#56D364", doneContainer: "#1B4D27", backdrop: "rgba(0,0,0,0.5)" },
 };
 
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** `a` blended toward `b` by `t` (0..1); both #RRGGBB. Any other format leaves `a` as it is. */
+function mix(a: string, b: string, t: number): string {
+  if (!HEX.test(a) || !HEX.test(b)) return a;
+  const ch = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const out = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t));
+  return `#${out.map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+}
+
 function fromRoles({ surface, ...r }: MaterialRoles, dark: boolean): Colors {
   return {
     ...r,
@@ -122,6 +134,7 @@ function fromRoles({ surface, ...r }: MaterialRoles, dark: boolean): Colors {
     idle: r.onSurfaceVariant,
     app: r.tertiary,
     appBg: r.tertiaryContainer,
+    outlineVariantSubtle: mix(r.outlineVariant, r.surfaceContainerLow, 0.5),
   };
 }
 

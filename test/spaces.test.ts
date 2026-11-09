@@ -1,14 +1,14 @@
-// How the Spaces list hangs what an agent launched (`herdr.parent`) under it.
+// How the Spaces list hangs what an agent launched (`herdr.parent`) under it, and how the inbox groups agents.
 import { expect, test } from "vitest";
 import type { HerdrDoc, HerdrTab, Session, Target } from "../src/hc/fleet";
-import { spaces, type Space, type TabItem } from "../src/spaces";
+import { inbox, spaces, type Space, type TabItem } from "../src/spaces";
 
 const targets: Target[] = [
   { coreId: "mac", label: "mac", linkId: "mac" },
   { coreId: "mini", label: "mini", linkId: "mini" },
 ];
 
-type Opts = { core?: string; space?: string; tab?: string; launcher?: string; parent?: string; state?: string; agent?: boolean };
+type Opts = { core?: string; space?: string; tab?: string; launcher?: string; parent?: string; state?: string; agent?: boolean; status?: string; ms?: number };
 
 function session(address: string, o: Opts = {}): Session {
   const core = o.core ?? "mac";
@@ -28,7 +28,8 @@ function session(address: string, o: Opts = {}): Session {
       cwd: "/work",
       state: o.state ?? "live",
       created_ms: 1,
-      status: o.agent === false ? null : { state: "working" },
+      status_ms: o.ms,
+      status: o.agent === false ? null : { state: o.status ?? "working" },
       labels,
       cols: 80,
       rows: 24,
@@ -136,4 +137,39 @@ test("inside a child space, a tab launched from another of its tabs hangs under 
   ];
   const { spaces: list } = spaces(docs, targets, sessions);
   expect(rows(byId(list, "sp_main"))).toEqual(["mac:t1", "  mac:t2 <sp_wt/tb2>", "    mac:t3 <sp_wt/tb3>"]);
+});
+
+// The inbox: every agent across spaces and machines, most urgent first.
+const groups = (docs: Record<string, HerdrDoc>, sessions: Session[]) =>
+  inbox(spaces(docs, targets, sessions)).map((g) => `${g.label}: ${g.agents.map((a) => `${a.session.key}@${a.space?.id ?? "-"}`).join(" ")}`);
+
+test("the inbox groups agents by urgency and leaves out empty groups and plain terminals", () => {
+  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1", "t2", "t3")] }), mini: doc({ id: "sp_b", name: "b", tabs: [tab("tb2", "t4")] }) };
+  const sessions = [
+    session("t1", { space: "sp_a", tab: "tb1", status: "idle", ms: 10 }),
+    session("t2", { space: "sp_a", tab: "tb1", status: "error", ms: 20 }),
+    session("t3", { space: "sp_a", tab: "tb1", agent: false }),
+    session("t4", { core: "mini", space: "sp_b", tab: "tb2", status: "blocked", ms: 30 }),
+    session("t5", { status: "working", ms: 40 }),
+    session("t6", { space: "sp_a", status: "done", state: "finished" }),
+  ];
+  expect(groups(docs, sessions)).toEqual(["Needs you: mac:t2@sp_a mini:t4@sp_b", "Working: mac:t5@-", "Idle: mac:t1@sp_a"]);
+});
+
+test("in the inbox, who needs you and waited longest leads; elsewhere the latest change does", () => {
+  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1", "t2", "t3", "t4", "t5", "t6")] }) };
+  const s = (address: string, status: string, ms?: number) => session(address, { space: "sp_a", tab: "tb1", status, ms });
+  // t6 has no status_ms: its creation (1) counts.
+  const sessions = [s("t1", "blocked", 50), s("t2", "blocked", 10), s("t3", "done", 10), s("t4", "done", 50), s("t5", "working", 30), s("t6", "working")];
+  expect(groups(docs, sessions)).toEqual(["Needs you: mac:t2@sp_a mac:t1@sp_a", "Done: mac:t4@sp_a mac:t3@sp_a", "Working: mac:t5@sp_a mac:t6@sp_a"]);
+});
+
+test("the inbox lists sub-agents and agents of child spaces, each in the space it runs in", () => {
+  const docs = { mac: doc({ id: "sp_main", name: "main", tabs: [tab("tb1", "t1")] }, { id: "sp_wt", name: "feature", tabs: [tab("tb2", "t2")] }) };
+  const sessions = [
+    session("t1", { space: "sp_main", tab: "tb1", ms: 1 }),
+    session("t2", { space: "sp_wt", tab: "tb2", launcher: "mac:t1", ms: 2 }),
+    session("t3", { parent: "mac:t2", ms: 3 }),
+  ];
+  expect(groups(docs, sessions)).toEqual(["Working: mac:t3@sp_wt mac:t2@sp_wt mac:t1@sp_main"]);
 });

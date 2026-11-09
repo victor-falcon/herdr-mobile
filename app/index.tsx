@@ -5,11 +5,14 @@ import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet, useMachines } from "../src/fleet-store";
 import type { Session } from "../src/hc/fleet";
-import { spaces as spacesOf, type Space } from "../src/spaces";
+import { updateSettings, useSettings, type HomeMode } from "../src/settings";
+import { inbox, spaces as spacesOf, type Space } from "../src/spaces";
 import { Avatar } from "../src/ui/Avatar";
 import { Button, Fab } from "../src/ui/Button";
+import { ButtonGroup, GroupButton } from "../src/ui/ButtonGroup";
 import { EmptyState } from "../src/ui/EmptyState";
 import { IconButton } from "../src/ui/IconButton";
+import { InboxList } from "../src/ui/InboxList";
 import { explainError, linkColor } from "../src/ui/machine-display";
 import { NewSessionSheet } from "../src/ui/NewSessionSheet";
 import { ProjectSheet } from "../src/ui/ProjectSheet";
@@ -23,6 +26,8 @@ export default function Agents() {
   const styles = useStyles();
   const { links, sessions, docs } = useFleet();
   const { machines, loaded } = useMachines();
+  const mode = useSettings().homeMode;
+  const setMode = (homeMode: HomeMode) => void updateSettings({ homeMode });
   const [picking, setPicking] = useState(false);
   const [startIn, setStartIn] = useState<Space | null>(null);
   const insets = useSafeAreaInsets();
@@ -36,8 +41,10 @@ export default function Agents() {
   const down = links.filter((l) => l.state !== "connected");
   const connected = links.some((l) => l.state === "connected");
   const targets = fleet.targets();
-  const { spaces, loose } = spacesOf(docs, targets, sessions);
-  const none = spaces.length === 0 && loose.length === 0;
+  const listed = spacesOf(docs, targets, sessions);
+  const { spaces, loose } = listed;
+  const groups = mode === "inbox" ? inbox(listed) : [];
+  const none = mode === "inbox" ? groups.length === 0 : spaces.length === 0 && loose.length === 0;
   const install = () => {
     if (update) installUpdate(update).catch((e) => Alert.alert("Could not update", e instanceof Error ? e.message : String(e)));
   };
@@ -48,11 +55,17 @@ export default function Agents() {
     <View style={styles.screen}>
       <Stack.Screen options={{ headerShown: false }} />
       <LargeTopAppBar
-        title="Spaces"
+        title={mode === "inbox" ? "Inbox" : "Spaces"}
         actions={
           <IconButton icon="settings-outline" label="Settings" onPress={() => router.push("/settings")} />
         }
       />
+      {machines.length > 0 && (
+        <ButtonGroup style={styles.mode} accessibilityLabel="Home view">
+          <GroupButton label="Spaces" icon="folder-outline" selected={mode === "spaces"} flex={1} onPress={() => setMode("spaces")} />
+          <GroupButton label="Inbox" icon="file-tray-outline" selected={mode === "inbox"} flex={1} onPress={() => setMode("inbox")} />
+        </ButtonGroup>
+      )}
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 120 }]}
         refreshControl={<RefreshControl refreshing={false} onRefresh={() => fleet.reconnect()} tintColor={colors.primary} colors={[colors.primary]} progressBackgroundColor={colors.surfaceContainerHigh} />}
@@ -115,9 +128,14 @@ export default function Agents() {
           />
         )}
 
-        <SpaceList spaces={spaces} loose={loose} showMachine={targets.length > 1} onSelect={open} onStart={setStartIn} />
+        {mode === "inbox" ? (
+          <InboxList groups={groups} showMachine={targets.length > 1} onSelect={open} />
+        ) : (
+          <SpaceList spaces={spaces} loose={loose} showMachine={targets.length > 1} onSelect={open} onStart={setStartIn} />
+        )}
 
-        {machines.length > 0 && connected && none && <EmptyState icon="folder-open-outline" title="No spaces yet" text="Tap Open project to start one." />}
+        {machines.length > 0 && connected && none && mode === "inbox" && <EmptyState icon="file-tray-outline" title="No agents running" text="Tap Open project to start one." />}
+        {machines.length > 0 && connected && none && mode === "spaces" && <EmptyState icon="folder-open-outline" title="No spaces yet" text="Tap Open project to start one." />}
       </ScrollView>
 
       {connected && <Fab label="Open project" icon="add" onPress={() => setPicking(true)} style={[styles.fab, { bottom: insets.bottom + 16 }]} />}
@@ -129,6 +147,7 @@ export default function Agents() {
 
 const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
+  mode: { paddingHorizontal: space.lg, paddingBottom: space.md },
   content: { flexGrow: 1, paddingHorizontal: space.lg, gap: space.xl },
   banners: { gap: space.sm },
   banner: { flexDirection: "row", alignItems: "center", gap: space.lg, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 64, borderRadius: shape.largeIncreased },
