@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet } from "../../src/fleet-store";
 import type { Session } from "../../src/hc/fleet";
@@ -9,7 +9,8 @@ import { useSettings } from "../../src/settings";
 import { spaces as spacesOf, type TabItem } from "../../src/spaces";
 import { TerminalInput, type TerminalInputHandle } from "../../src/terminal/TerminalInput";
 import { TerminalView, type TerminalHandle, type TerminalMode } from "../../src/terminal/TerminalView";
-import { AgentAvatar, StatusMark } from "../../src/ui/Avatar";
+import { AgentAvatar } from "../../src/ui/Avatar";
+import { Dot } from "../../src/ui/Dot";
 import { IconButton } from "../../src/ui/IconButton";
 import { setLastOpened } from "../../src/ui/last-opened";
 import { SessionActions } from "../../src/ui/SessionActions";
@@ -44,6 +45,11 @@ export default function SessionScreen() {
   const { spaces } = spacesOf(docs, fleet.targets(), sessions);
   const home = spaces.find((sp) => sp.agents.some((a) => a.key === key) || sp.tabs.some((tb) => ownPanes(tb.items).some((p) => p.key === key)));
   const panes = home?.tabs.map((tb) => ownPanes(tb.items)).find((ps) => ps.some((p) => p.key === key)) ?? [];
+  // A still dot for a pane's state: nothing animates beside the terminal's WebView.
+  const paneColor = (s: Session) => {
+    const st = s.terminal.status?.state;
+    return st === "blocked" || st === "error" ? colors.error : st === "working" ? colors.working : st === "done" ? colors.done : colors.onSurfaceVariant;
+  };
   const switchTo = (s: Session) => router.replace({ pathname: "/session/[key]", params: { key: s.key } });
 
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
@@ -83,7 +89,7 @@ export default function SessionScreen() {
         actions={<IconButton icon="ellipsis-vertical" label="Session actions" onPress={() => setActions(true)} disabled={!session} />}
       />
       {panes.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.panes} contentContainerStyle={styles.panesContent} accessibilityRole="tablist">
+        <View style={styles.panes} accessibilityRole="tablist">
           {panes.map((p) => {
             const on = p.key === key;
             return (
@@ -94,14 +100,14 @@ export default function SessionScreen() {
                 accessibilityState={{ selected: on }}
                 style={({ pressed }) => [styles.chip, on ? styles.chipOn : styles.chipOff, pressed && !on && styles.chipPressed]}
               >
-                {on ? <Ionicons name="checkmark" size={18} color={colors.onSecondaryContainer} /> : p.terminal.status ? <StatusMark session={p} size={18} /> : null}
+                {on ? <Ionicons name="checkmark" size={18} color={colors.onSecondaryContainer} /> : p.terminal.status ? <Dot color={paneColor(p)} size={8} /> : null}
                 <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>
                   {paneName(p)}
                 </Text>
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
       )}
       {t && route ? (
         <TerminalView
@@ -149,9 +155,9 @@ const useStyles = makeStyles((colors) => ({
   gone: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
   muted: { ...typography.bodyLarge, color: colors.onSurfaceVariant, textAlign: "center" },
   // The panes of a split tab, as filter chips.
-  panes: { flexGrow: 0 },
-  panesContent: { gap: space.sm, paddingHorizontal: space.lg, paddingBottom: space.sm },
-  chip: { flexDirection: "row", alignItems: "center", gap: space.sm, height: 32, borderRadius: shape.small, paddingHorizontal: space.lg },
+  // A plain row, not a ScrollView: chips shrink to share the width.
+  panes: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.lg, paddingBottom: space.sm, overflow: "hidden" },
+  chip: { flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.sm, height: 32, borderRadius: shape.small, paddingHorizontal: space.lg },
   chipOn: { backgroundColor: colors.secondaryContainer, paddingLeft: space.sm },
   chipOff: { borderWidth: 1, borderColor: colors.outlineVariant },
   chipPressed: { backgroundColor: colors.surfaceContainerHigh },
