@@ -202,7 +202,9 @@ export async function startSpace(target: Target, folder: string): Promise<string
 }
 
 export function spaceFor(project: Project, spaces: Space[]): Space | undefined {
-  return spaces.find(
+  const matches = spaces.filter(
     (s) => s.target.coreId === project.target.coreId && !!s.folder && (s.folder === project.folder || s.folder.startsWith(project.folder + "/")),
   );
+  // A child space has no row of its own, so one that does comes first.
+  return matches.find((s) => !s.nestedUnder) ?? matches[0];
 }

@@ -1,7 +1,15 @@
 import type { HerdrDoc, HerdrTab, Session, Target } from "./hc/fleet";
 
-/** One pane of a tab: a terminal (agent or not), or a mod pane the desktop draws. */
-export type TabItem = { kind: "session"; session: Session; sub: boolean } | { kind: "mod"; key: string; name: string };
+/** The tab, and its space, that a row was moved out of to hang under the agent that launched it. */
+export type Origin = { space: Space; tab: SpaceTab };
+
+/**
+ * One pane of a tab: a terminal (agent or not), or a mod pane the desktop draws.
+ * `sub` marks a sub-agent within the session's own tab; `depth` is how deep the
+ * row sits in the list's tree. `from` is set on rows that belong to another tab
+ * (of a child space or of this one) and hang here under the agent that launched them.
+ */
+export type TabItem = { kind: "session"; session: Session; sub: boolean; depth: number; from?: Origin } | { kind: "mod"; key: string; name: string };
 
 /** A tab of a space, with its panes in the desktop's order and the sub-agents its agents started. */
 export type SpaceTab = { key: string; id: string; name: string; items: TabItem[] };
@@ -15,6 +23,8 @@ export type Space = {
   factory: boolean;
   agents: Session[];
   tabs: SpaceTab[];
+  /** The agent, in another space, this space's agents were launched by: its tabs hang under that agent and it has no row of its own. */
+  nestedUnder: string | null;
 };
 
 export const coreOf = (key: string) => key.slice(0, key.lastIndexOf(":"));
@@ -94,7 +104,7 @@ function tabsOf(space: Space, docTabs: HerdrTab[], sessions: Session[], byKey: M
   const add = (items: TabItem[], s: Session, sub: boolean) => {
     if (placed.has(s.key)) return;
     placed.add(s.key);
-    items.push({ kind: "session", session: s, sub });
+    items.push({ kind: "session", session: s, sub, depth: sub ? 1 : 0 });
     for (const c of children.get(s.key) ?? []) add(items, c, true);
   };
 
@@ -134,7 +144,7 @@ export function spaces(docs: Record<string, HerdrDoc | null>, targets: Target[],
     const key = `${target.coreId}:${id}`;
     let space = out.get(key);
     if (!space) {
-      space = { key, target, id, name: name || folderName(folder), folder, factory: id.startsWith("factory-"), agents: [], tabs: [] };
+      space = { key, target, id, name: name || folderName(folder), folder, factory: id.startsWith("factory-"), agents: [], tabs: [], nestedUnder: null };
       out.set(key, space);
     }
     return space;
@@ -179,9 +189,119 @@ export function spaces(docs: Record<string, HerdrDoc | null>, targets: Target[],
     for (const s of docs[target.coreId]?.spaces ?? []) if (s.id) docTabs.set(`${target.coreId}:${s.id}`, s.tabs ?? []);
   }
   for (const space of out.values()) space.tabs = tabsOf(space, docTabs.get(space.key) ?? [], sessions, byKey);
+  nestLaunched([...out.values()]);
 
   const list = [...out.values()].sort(
     (a, b) => Number(a.factory) - Number(b.factory) || a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),
   );
   return { spaces: list, loose };
+}
+
+/** How many levels of child spaces a top-level space holds: its children and theirs. */
+const MAX_NESTING = 2;
+
+/** Where each listed session sits. */
+type Homes = Map<string, Origin>;
+
+/** The launchers (`herdr.parent`) of a tab's sessions. */
+const launchersOf = (tab: SpaceTab) => tab.items.flatMap((it) => (it.kind === "session" && it.session.launcherKey && it.session.launcherKey !== it.session.key ? [it.session.launcherKey] : []));
+
+/**
+ * Child spaces: each space whose agent was launched by an agent in another
+ * space, and that agent's key. Loops and spaces nested too deep are left out,
+ * so they keep their own row.
+ */
+function childSpaces(all: Space[], home: Homes): Map<Space, string> {
+  const under = new Map<Space, string>();
+  for (const space of all) {
+    // The first of its agents launched from elsewhere decides where it hangs.
+    const p = space.tabs.flatMap(launchersOf).find((k) => home.has(k) && home.get(k)!.space !== space);
+    if (p) under.set(space, p);
+  }
+  const parentOf = (space: Space) => {
+    const p = under.get(space);
+    return p ? home.get(p)!.space : undefined;
+  };
+  // A space that ends up under itself would make a loop: it stays a space of its own.
+  for (const space of [...under.keys()]) {
+    const seen = new Set<Space>();
+    for (let at = parentOf(space); at && !seen.has(at); at = parentOf(at)) {
+      if (at === space) {
+        under.delete(space);
+        break;
+      }
+      seen.add(at);
+    }
+  }
+  const depth = (space: Space) => {
+    let n = 0;
+    for (let at = parentOf(space); at; at = parentOf(at)) n++;
+    return n;
+  };
+  // Too deep: the shallowest such space gets its row back, and the ones under it move up with it.
+  for (;;) {
+    const deep = [...under.keys()].filter((sp) => depth(sp) > MAX_NESTING).sort((a, b) => depth(a) - depth(b))[0];
+    if (!deep) return under;
+    under.delete(deep);
+  }
+}
+
+/** Tabs launched from another tab of the same space, and their launcher's key, one level only: a tab that moves holds none that move. */
+function movedTabs(all: Space[], home: Homes): Map<SpaceTab, string> {
+  const candidate = new Map<SpaceTab, string>();
+  for (const space of all) {
+    for (const tab of space.tabs) {
+      const p = launchersOf(tab).find((k) => home.get(k)?.space === space && home.get(k)!.tab !== tab);
+      if (p) candidate.set(tab, p);
+    }
+  }
+  return new Map([...candidate].filter(([, p]) => !candidate.has(home.get(p)!.tab)));
+}
+
+/**
+ * Hangs what an agent launched (`herdr.parent`) under it, as the desktop's
+ * sidebar does: a space whose agents another space's agent launched loses its
+ * own row and its tabs hang under that agent; a tab launched by an agent in
+ * another tab of the same space hangs under it too. A launcher that is gone
+ * leaves things where they are.
+ */
+function nestLaunched(all: Space[]) {
+  const home: Homes = new Map();
+  for (const space of all) for (const tab of space.tabs) for (const it of tab.items) if (it.kind === "session") home.set(it.session.key, { space, tab });
+  const under = childSpaces(all, home);
+  const moved = movedTabs(all, home);
+
+  // Launcher key -> the tabs that hang under it.
+  const kids = new Map<string, Origin[]>();
+  for (const space of all) {
+    for (const tab of space.tabs) {
+      const launcher = moved.get(tab) ?? under.get(space);
+      if (launcher) kids.set(launcher, [...(kids.get(launcher) ?? []), { space, tab }]);
+    }
+  }
+  if (!kids.size) return;
+
+  const seen = new Set<SpaceTab>();
+  const expand = (tab: SpaceTab, base: number, from: Origin | undefined): TabItem[] => {
+    if (seen.has(tab)) return [];
+    seen.add(tab);
+    const out: TabItem[] = [];
+    for (const it of tab.items) {
+      if (it.kind === "mod") {
+        // A desktop panel only means something in its own tab.
+        if (!from) out.push(it);
+        continue;
+      }
+      const depth = base + it.depth;
+      out.push(from ? { ...it, depth, from } : { ...it, depth });
+      for (const k of kids.get(it.session.key) ?? []) out.push(...expand(k.tab, depth + 1, k));
+    }
+    return out;
+  };
+  // Each tab is expanded once, from the tab its tree starts in; a child space keeps its own tabs as they were.
+  for (const space of all) {
+    space.nestedUnder = under.get(space) ?? null;
+    if (space.nestedUnder) continue;
+    space.tabs = space.tabs.filter((tab) => !moved.has(tab)).map((tab) => ({ ...tab, items: expand(tab, 0, undefined) }));
+  }
 }

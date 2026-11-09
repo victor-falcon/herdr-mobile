@@ -204,6 +204,20 @@ test("spaces come from each machine's Herdr layout and from labels, with sub-age
   await until(() => view().spaces.some((s) => s.name === "later"));
 }, 30_000);
 
+test("an agent's launcher label resolves to its launcher's key, on its own machine or on one it added", async () => {
+  const fleet = new Fleet(open);
+  fleets.push(fleet);
+  fleet.setMachines([A]);
+  const a = await until(() => fleet.targets().find((x) => !x.on));
+  const b = await until(() => fleet.targets().find((x) => x.on === "b"));
+  const here = await fleet.run(a, { argv: AGENT, labels: { "herdr.parent": "t999" } });
+  const far = await fleet.run(a, { argv: AGENT, labels: { "herdr.parent": `b/${bAddress}` } });
+  const launcherOf = (key: string) => fleet.snapshot().sessions.find((s) => s.key === key)?.launcherKey;
+  await until(() => launcherOf(here) && launcherOf(far));
+  expect(launcherOf(here)).toBe(`${a.coreId}:t999`);
+  expect(launcherOf(far)).toBe(`${b.coreId}:${bAddress}`);
+}, 30_000);
+
 test("tabs list every pane in the desktop's order, rename in the layout, and close by ending their terminals", async () => {
   const fleet = new Fleet(open);
   fleets.push(fleet);
