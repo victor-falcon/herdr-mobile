@@ -27,6 +27,7 @@ test("ctrl turns letters and a few symbols into control characters", () => {
   expect(withCtrl("C")).toBe("\x03");
   expect(withCtrl("[")).toBe("\x1b");
   expect(withCtrl(" ")).toBe("\x00");
+  expect(withCtrl("/")).toBe("\x1f");
   expect(withCtrl("1")).toBeNull();
   expect(withCtrl("ab")).toBeNull();
 });

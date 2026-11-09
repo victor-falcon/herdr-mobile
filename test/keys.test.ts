@@ -21,3 +21,10 @@ test("the key bar has shift+enter and ctrl+enter keys", () => {
   expect(keys).toContain("shift+enter");
   expect(keys).toContain("ctrl+enter");
 });
+
+test("the key bar has a slash key that types itself, and no digit keys", () => {
+  const keys = KEY_ROWS.flat().map((k) => k.key);
+  expect(keys).toContain("/");
+  expect(keys.filter((k) => /^\d$/.test(k))).toEqual([]);
+  expect(keyBytes("/", false)).toBe("/");
+});
