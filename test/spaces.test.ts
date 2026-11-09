@@ -251,7 +251,7 @@ test("a subagent's subagent counts toward the tree too", () => {
   expect(subsOf(docs, sessions, "mac:t1")).toEqual({ subs: ["mac:s2", "mac:s1"], summary: { status: "blocked", n: 1, total: 2 } });
 });
 
-test("a row sorts by the change of the member that put it in its group", () => {
+test("a row sorts by, and shows, the change of the member that put it in its group", () => {
   const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10")] }) };
   const p = (address: string, status: string, ms: number) => session(address, { space: "sp_a", tab: "tb1", status, ms });
   const sub = (address: string, parent: string, status: string, ms: number) => session(address, { parent: `mac:${parent}`, status, ms });
@@ -283,6 +283,8 @@ test("a row sorts by the change of the member that put it in its group", () => {
     "Working: mac:p6@sp_a mac:p5@sp_a mac:p4@sp_a",
     "Idle: mac:p10@sp_a mac:p9@sp_a",
   ]);
+  const times = inbox(spaces(docs, targets, sessions)).map((g) => g.agents.map((a) => `${a.session.key}=${a.changedAt}`).join(" "));
+  expect(times).toEqual(["mac:p3=60 mac:p2=50 mac:p1=5", "mac:p8=25 mac:p7=15", "mac:p6=40 mac:p5=30 mac:p4=20", "mac:p10=8 mac:p9=5"]);
 });
 
 test("a parent's subagents read most urgent first: blocked, working, done, idle, then the latest change", () => {

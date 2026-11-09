@@ -33,7 +33,7 @@ export function InboxList({ groups, showMachine, onSelect }: Props) {
           </View>
           <Card inset={TEXT_INSET}>
             {g.agents.map((agent) => {
-              const { session, space, summary } = agent;
+              const { session, space, summary, changedAt } = agent;
               const target = agentTarget(session, space);
               // Where it runs, as the desktop's "space · 5m": the time is already on the right.
               const where = [showMachine ? (space?.target.label ?? session.machine) : "", space?.name ?? ""].filter(Boolean).join(" · ") || null;
@@ -43,6 +43,7 @@ export function InboxList({ groups, showMachine, onSelect }: Props) {
                     session={session}
                     hint={where}
                     urgentFirst
+                    changedAt={changedAt}
                     trailing={summary ? <SubChip summary={summary} onPress={() => setSheetKey(session.key)} /> : null}
                     onPress={() => onSelect(session)}
                     onLongPress={() => rows.open(target)}

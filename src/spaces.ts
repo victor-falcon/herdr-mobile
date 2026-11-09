@@ -329,9 +329,10 @@ export type PlacedAgent = { session: Session; space: Space | null };
 /**
  * An agent the inbox lists. `subs` are the agents it launched, and theirs in
  * turn, that are still running: the inbox leaves them out and shows them on
- * this row, most urgent first.
+ * this row, most urgent first. `changedAt` is the time the row sorts by, and
+ * the age it shows: see `placeOf`.
  */
-export type InboxAgent = PlacedAgent & { subs: PlacedAgent[]; summary: SubSummary | null };
+export type InboxAgent = PlacedAgent & { subs: PlacedAgent[]; summary: SubSummary | null; changedAt: number };
 
 export type InboxGroupKey = "needs-you" | "done" | "working" | "idle";
 export type InboxGroup = { key: InboxGroupKey; label: string; agents: InboxAgent[] };
@@ -400,7 +401,7 @@ export function subsLabel({ status, n, total }: SubSummary): string {
  * the agent's own status and time: a subagent that is done reports to its
  * agent, and only the agent being done is news.
  */
-function placeOf({ session, subs }: InboxAgent): { group: InboxGroupKey; changedAt: number } {
+function placeOf(session: Session, subs: PlacedAgent[]): { group: InboxGroupKey; changedAt: number } {
   const tree = [session, ...subs.map((x) => x.session)];
   for (const status of ["blocked", "working"] as const) {
     const members = tree.filter((s) => inboxStatus(s) === status);
@@ -445,16 +446,17 @@ export function inbox({ spaces: list, loose }: { spaces: Space[]; loose: Session
     else tops.push(a);
   }
   const bySubRank = (x: Session, y: Session) => SUB_RANK[inboxStatus(y)] - SUB_RANK[inboxStatus(x)] || changed(y) - changed(x) || x.key.localeCompare(y.key);
-  const shown: InboxAgent[] = tops.map((a) => {
+  const placed = tops.map((a) => {
     const subs = (subsOf.get(a.session.key) ?? []).sort((x, y) => bySubRank(x.session, y.session));
-    return { ...a, subs, summary: summarize(subs.map((x) => x.session)) };
+    const { group, changedAt } = placeOf(a.session, subs);
+    const agent: InboxAgent = { ...a, subs, summary: summarize(subs.map((x) => x.session)), changedAt };
+    return { group, agent };
   });
-  const placed = shown.map((agent) => ({ agent, ...placeOf(agent) }));
   return INBOX_GROUPS.map(({ key, label }) => {
     const agents = placed
       .filter((p) => p.group === key)
-      .sort((x, y) => y.changedAt - x.changedAt || x.agent.session.key.localeCompare(y.agent.session.key))
-      .map((p) => p.agent);
+      .map((p) => p.agent)
+      .sort((x, y) => y.changedAt - x.changedAt || x.session.key.localeCompare(y.session.key));
     return { key, label, agents };
   }).filter((g) => g.agents.length > 0);
 }
