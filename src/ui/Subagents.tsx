@@ -4,7 +4,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import type { Session } from "../hc/fleet";
-import { inboxStatus, type InboxAgent, type InboxStatus, type SubSummary } from "../spaces";
+import { inboxStatus, statusWords, subsLabel, type InboxAgent, type InboxStatus, type SubSummary } from "../spaces";
 import { StatusAvatar, statusAvatarColors, type AvatarStatus } from "./Avatar";
 import { segmentCorners, withPositions, type Position } from "./press";
 import { agentTitle, ago } from "./session-display";
@@ -17,15 +17,6 @@ const AVATAR: Record<InboxStatus, AvatarStatus> = { blocked: "needsYou", working
 /** The chip's ink and fill: the status avatars' colours. */
 function tint(status: InboxStatus, colors: Colors) {
   return statusAvatarColors(AVATAR[status], colors);
-}
-
-const WORDS: Record<InboxStatus, string> = { blocked: "needs you", working: "working", done: "done", idle: "idle" };
-
-/** "3 subagents, 1 needs you"; "2 subagents, all idle". */
-export function subsLabel({ status, n, total }: SubSummary): string {
-  const all = `${total} subagent${total === 1 ? "" : "s"}`;
-  if (n === total && total > 1) return `${all}, all ${WORDS[status]}`;
-  return `${all}, ${n} ${status === "blocked" && n > 1 ? "need you" : WORDS[status]}`;
 }
 
 /** How many subagents, with the most urgent one's mark: ! > the cookie > a dot > a stack when all are idle. */
@@ -99,9 +90,9 @@ function SubRow({ session, onPress, position = "only" }: { session: Session; onP
   const [tl, tr, br, bl] = segmentCorners(position, OUTER, INNER, "column");
   const t = session.terminal;
   const name = agentTitle(session);
-  const blocked = inboxStatus(session) === "blocked";
+  const status = inboxStatus(session);
   // What it is doing: the agent's own message, else its terminal's title when that says something the name doesn't.
-  const doing = t.status?.msg || (t.title && t.title !== name ? t.title : null) || WORDS[inboxStatus(session)];
+  const doing = t.status?.msg || (t.title && t.title !== name ? t.title : null) || statusWords(status);
   return (
     <Pressable
       onPress={onPress}
@@ -117,7 +108,7 @@ function SubRow({ session, onPress, position = "only" }: { session: Session; onP
         <Text style={styles.name} numberOfLines={1}>
           {name}
         </Text>
-        <Text style={[styles.doing, blocked && styles.blocked]} numberOfLines={1}>
+        <Text style={[styles.doing, status === "blocked" && styles.blocked]} numberOfLines={1}>
           {doing}
         </Text>
       </View>

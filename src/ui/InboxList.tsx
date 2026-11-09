@@ -19,8 +19,8 @@ export function InboxList({ groups, showMachine, onSelect }: Props) {
   const styles = useStyles();
   const rows = useRowMenu();
   // The parent whose subagents the sheet lists, found again on each update so the sheet stays current (and closes when it is gone).
-  const [subsKey, setSubsKey] = useState<string | null>(null);
-  const subsOf = subsKey ? (groups.flatMap((g) => g.agents).find((a) => a.session.key === subsKey && a.subs.length) ?? null) : null;
+  const [sheetKey, setSheetKey] = useState<string | null>(null);
+  const sheetAgent = sheetKey ? (groups.flatMap((g) => g.agents).find((a) => a.session.key === sheetKey && a.subs.length) ?? null) : null;
   return (
     <View style={styles.list}>
       {groups.map((g) => (
@@ -43,7 +43,7 @@ export function InboxList({ groups, showMachine, onSelect }: Props) {
                     session={session}
                     hint={where}
                     urgentFirst
-                    trailing={summary ? <SubChip summary={summary} onPress={() => setSubsKey(session.key)} /> : null}
+                    trailing={summary ? <SubChip summary={summary} onPress={() => setSheetKey(session.key)} /> : null}
                     onPress={() => onSelect(session)}
                     onLongPress={() => rows.open(target)}
                   />
@@ -54,7 +54,7 @@ export function InboxList({ groups, showMachine, onSelect }: Props) {
         </View>
       ))}
       {rows.sheets}
-      <SubagentsSheet agent={subsOf} onClose={() => setSubsKey(null)} onSelect={onSelect} />
+      <SubagentsSheet agent={sheetAgent} onClose={() => setSheetKey(null)} onSelect={onSelect} />
     </View>
   );
 }

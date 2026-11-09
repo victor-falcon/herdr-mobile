@@ -499,8 +499,10 @@ function ModRow({ name, nested, onLongPress }: { name: string; nested: boolean; 
   );
 }
 
-/** `urgentFirst`: an agent that needs you says why ahead of the hint. */
-/** `trailing` sits under the time, at the end of the second line (the inbox's subagents chip). */
+/**
+ * `urgentFirst`: an agent that needs you says why ahead of the hint.
+ * `trailing` sits under the time, at the end of the second line (the inbox's subagents chip).
+ */
 export function AgentRow({
   session,
   nested = false,
@@ -533,14 +535,10 @@ export function AgentRow({
         </Text>
         <Supporting hint={hint} text={msg} style={blocked && styles.blocked} textFirst={urgentFirst && blocked} />
       </View>
-      {trailing ? (
-        <View style={styles.trailing}>
-          <Text style={styles.age}>{ago(t.status_ms ?? t.created_ms)}</Text>
-          {trailing}
-        </View>
-      ) : (
+      <View style={styles.trailing}>
         <Text style={styles.age}>{ago(t.status_ms ?? t.created_ms)}</Text>
-      )}
+        {trailing}
+      </View>
     </Pressable>
   );
 }

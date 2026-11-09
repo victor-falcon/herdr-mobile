@@ -1,7 +1,7 @@
 // How the Spaces list hangs what an agent launched (`herdr.parent`) under it, and how the inbox groups agents.
 import { expect, test } from "vitest";
 import type { HerdrDoc, HerdrTab, Session, Target } from "../src/hc/fleet";
-import { inbox, spaces, type Space, type TabItem } from "../src/spaces";
+import { inbox, spaces, subsLabel, type Space, type TabItem } from "../src/spaces";
 
 const targets: Target[] = [
   { coreId: "mac", label: "mac", linkId: "mac" },
@@ -196,8 +196,12 @@ test("an agent whose launcher is gone, or is no agent, has its own row in the in
 
 test("agents that launched each other in a loop keep their own rows", () => {
   const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1", "t2")] }) };
-  const sessions = [session("t1", { space: "sp_a", tab: "tb1", launcher: "mac:t2", ms: 1 }), session("t2", { space: "sp_a", tab: "tb1", launcher: "mac:t1", ms: 2 })];
-  expect(groups(docs, sessions)).toEqual(["Working: mac:t2@sp_a mac:t1@sp_a"]);
+  const sessions = [
+    session("t1", { space: "sp_a", tab: "tb1", launcher: "mac:t2", ms: 1 }),
+    session("t2", { space: "sp_a", tab: "tb1", launcher: "mac:t1", ms: 2 }),
+    session("t3", { space: "sp_a", tab: "tb1", launcher: "mac:t1", ms: 3 }),
+  ];
+  expect(groups(docs, sessions)).toEqual(["Working: mac:t3@sp_a mac:t2@sp_a mac:t1@sp_a"]);
 });
 
 test("a parent moves to its most urgent subagent's group when that one outranks its own", () => {
@@ -229,4 +233,12 @@ test("a parent's subagents read most urgent first: blocked, working, done, idle,
   expect(subsOf(docs, sessions, "mac:t1")).toEqual({ subs: ["mac:s4", "mac:s3", "mac:s2", "mac:s1"], summary: { status: "working", n: 1, total: 4 } });
   const idle = [sessions[0], session("s1", { parent: "mac:t1", status: "idle" }), session("s2", { parent: "mac:t1", status: "idle" })];
   expect(subsOf(docs, idle, "mac:t1").summary).toEqual({ status: "idle", n: 2, total: 2 });
+});
+
+test("the subagents chip says how many there are and what the most urgent are doing", () => {
+  expect(subsLabel({ status: "blocked", n: 1, total: 3 })).toBe("3 subagents, 1 needs you");
+  expect(subsLabel({ status: "blocked", n: 2, total: 3 })).toBe("3 subagents, 2 need you");
+  expect(subsLabel({ status: "blocked", n: 2, total: 2 })).toBe("2 subagents, all need you");
+  expect(subsLabel({ status: "idle", n: 2, total: 2 })).toBe("2 subagents, all idle");
+  expect(subsLabel({ status: "working", n: 1, total: 1 })).toBe("1 subagent, 1 working");
 });
