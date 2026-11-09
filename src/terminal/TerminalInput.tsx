@@ -13,7 +13,7 @@ import { updateSettings, useSettings } from "../settings";
 import type { IconName } from "../ui/icons";
 import { corners, MorphPressable, type Corners } from "../ui/press";
 import { fonts, makeStyles, shape, space, typography, useColors } from "../ui/theme";
-import { CLUSTER_START, KEY_ROWS, keyBytes, type BarKey } from "./keys";
+import { CLUSTER_START, KEY_ROWS, hcKeyName, keyBytes, type BarKey } from "./keys";
 import type { TerminalHandle } from "./TerminalView";
 import { enterSends, SEND_DELAY_MS, withoutTypedNewline, type Change } from "./composer";
 import { typedText, withCtrl } from "./typing";
@@ -83,11 +83,12 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
   const pressKey = (name: string) => {
     resetMirror();
     if (name === "paste") return void paste();
+    if (message && name === "ctrl+enter" && latest.current.trim()) return void sendNow();
     if (ctrl && name.length === 1) {
       setCtrl(false);
       name = `ctrl+${name}`;
     }
-    if (!write(keyBytes(name, terminal.current?.appCursor() ?? false))) call("terminal.keys", { keys: [name] }).catch(fail);
+    if (!write(keyBytes(name, terminal.current?.appCursor() ?? false))) call("terminal.keys", { keys: [hcKeyName(name)] }).catch(fail);
   };
 
   const typeRaw = (chars: string) => {
@@ -125,25 +126,34 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
     resetMirror();
   };
 
-  const send = async (message: string, force = false) => {
+  /** Sends the draft, pasted and submitted; `then` runs once it went out. */
+  const send = async (draft: string, force = false, then?: () => void) => {
     cancelPendingSend();
-    const body = message.trimEnd();
+    const body = draft.trimEnd();
     if (!body.trim() || sending) return;
     setSending(true);
+    let sent = false;
     try {
       await call("terminal.send", { text: body, force });
       changeText("");
+      sent = true;
     } catch (e) {
       if (!force && e instanceof HcError && /block/i.test(`${e.kind} ${e.message}`)) {
         Alert.alert("It is waiting on a question", "Typing now may answer its dialog.", [
           { text: "Cancel", style: "cancel" },
-          { text: "Send anyway", onPress: () => void send(body, true) },
+          { text: "Send anyway", onPress: () => void send(body, true, then) },
         ]);
       } else fail(e);
     } finally {
       setSending(false);
     }
+    if (sent) then?.();
   };
+
+  // ^⏎ on a drafted message: sent as usual, which queues it behind a working
+  // agent, then ctrl+enter, which has the agent take it right away (or does
+  // nothing when it is idle).
+  const sendNow = () => send(latest.current, false, () => write(keyBytes("ctrl+enter", false)) || call("terminal.keys", { keys: ["ctrl+enter"] }).catch(fail));
 
   // Enter types a newline, and a lone newline the user typed sends. Dictation
   // apps paste line breaks as Enter too, but right after or right before a burst
@@ -306,7 +316,7 @@ function BarSlot({ slot, shapeOf, message, ctrl, keyboardOpen, onMode, onCtrl, o
     default: {
       const icon = ICONS[slot.key];
       const name = slot.key === "paste" ? "Paste" : slot.label;
-      return <Key shapeOf={shapeOf} label={slot.label} icon={icon} accessibilityLabel={icon ? name : undefined} tonal={slot.arrow} onPress={() => onKey(slot.key)} />;
+      return <Key shapeOf={shapeOf} label={slot.label} icon={icon} accessibilityLabel={icon ? name : slot.spoken} tonal={slot.arrow} onPress={() => onKey(slot.key)} />;
     }
   }
 }
@@ -354,7 +364,7 @@ function Key({ label = "", icon, onPress, active, tonal, disabled, shapeOf, acce
       style={styles.key}
       surface={[styles.keySurface, { backgroundColor: fill, opacity: disabled ? 0.38 : 1 }]}
     >
-      {icon ? <Ionicons name={icon} size={20} color={ink} /> : <Text style={[styles.keyText, { color: ink }, /^\d$/.test(label) && styles.keyDigit]}>{label}</Text>}
+      {icon ? <Ionicons name={icon} size={20} color={ink} /> : <Text style={[styles.keyText, { color: ink }, /^\d$/.test(label) && styles.keyDigit, !/[a-z\d]/i.test(label) && styles.keySymbol]}>{label}</Text>}
     </MorphPressable>
   );
 }
@@ -398,6 +408,8 @@ const useStyles = makeStyles((colors) => ({
   keySurface: { height: CONTROL },
   keyText: { fontSize: 13, fontFamily: fonts.monoMedium, fontWeight: "normal" },
   keyDigit: { fontSize: 15 },
+  // Symbol-only labels like ⇧⏎ fall back to a thin font that reads small at 13.
+  keySymbol: { fontSize: 20 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingTop: space.md },
   field: {
     flex: 1,
