@@ -2,15 +2,16 @@
 // program's cursor-key mode (DECCKM), which xterm reports from the page.
 
 export type KeyName =
-  | "esc" | "enter" | "tab" | "shift+tab" | "backspace"
+  | "esc" | "enter" | "shift+enter" | "tab" | "shift+tab" | "backspace"
   | "up" | "down" | "left" | "right" | "home" | "end" | "pageup" | "pagedown"
   | "ctrl+c" | "ctrl+d" | "ctrl+r" | "ctrl+z" | "ctrl+l";
 
 /**
  * A slot on the key bar. "mode", "ctrl", "keyboard" and "paste" are the bar's
- * own controls; single characters type themselves.
+ * own controls; single characters type themselves. `spoken` is what a screen
+ * reader says when the label is a symbol it would misread.
  */
-export type BarKey = { key: string; label: string; arrow?: boolean };
+export type BarKey = { key: string; label: string; spoken?: string; arrow?: boolean };
 
 /**
  * The key bar's two rows, all slots the same width. Each row ends in three
@@ -33,7 +34,7 @@ export const KEY_ROWS: BarKey[][] = [
     { key: "paste", label: "paste" },
     { key: "1", label: "1" },
     { key: "2", label: "2" },
-    { key: "3", label: "3" },
+    { key: "shift+enter", label: "⇧⏎", spoken: "Shift enter" },
     { key: "left", label: "←", arrow: true },
     { key: "down", label: "↓", arrow: true },
     { key: "right", label: "→", arrow: true },
@@ -52,6 +53,10 @@ export function keyBytes(key: KeyName | string, appCursor: boolean): string {
       return "\x1b";
     case "enter":
       return "\r";
+    case "shift+enter":
+      // ESC CR, what a terminal set up for coding agents sends for shift+enter:
+      // Claude Code and similar prompts insert a new line instead of submitting.
+      return "\x1b\r";
     case "tab":
       return "\t";
     case "shift+tab":
@@ -66,4 +71,13 @@ export function keyBytes(key: KeyName | string, appCursor: boolean): string {
   const ctrl = /^ctrl\+([a-z])$/.exec(key);
   if (ctrl) return String.fromCharCode(ctrl[1].charCodeAt(0) - 96);
   return key; // a printable key, like "1" or "y"
+}
+
+/**
+ * The key's name for hc's terminal.keys, used when the page can't write. hc
+ * sends shift+enter as CSI 27;2;13~ but alt+enter as ESC CR, the bytes
+ * keyBytes sends for shift+enter.
+ */
+export function hcKeyName(key: string): string {
+  return key === "shift+enter" ? "alt+enter" : key;
 }

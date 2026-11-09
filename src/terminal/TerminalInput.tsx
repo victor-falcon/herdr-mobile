@@ -13,7 +13,7 @@ import { updateSettings, useSettings } from "../settings";
 import type { IconName } from "../ui/icons";
 import { corners, MorphPressable, type Corners } from "../ui/press";
 import { fonts, makeStyles, shape, space, typography, useColors } from "../ui/theme";
-import { CLUSTER_START, KEY_ROWS, keyBytes, type BarKey } from "./keys";
+import { CLUSTER_START, KEY_ROWS, hcKeyName, keyBytes, type BarKey } from "./keys";
 import type { TerminalHandle } from "./TerminalView";
 import { enterSends, SEND_DELAY_MS, withoutTypedNewline, type Change } from "./composer";
 import { typedText, withCtrl } from "./typing";
@@ -87,7 +87,7 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
       setCtrl(false);
       name = `ctrl+${name}`;
     }
-    if (!write(keyBytes(name, terminal.current?.appCursor() ?? false))) call("terminal.keys", { keys: [name] }).catch(fail);
+    if (!write(keyBytes(name, terminal.current?.appCursor() ?? false))) call("terminal.keys", { keys: [hcKeyName(name)] }).catch(fail);
   };
 
   const typeRaw = (chars: string) => {
@@ -306,7 +306,7 @@ function BarSlot({ slot, shapeOf, message, ctrl, keyboardOpen, onMode, onCtrl, o
     default: {
       const icon = ICONS[slot.key];
       const name = slot.key === "paste" ? "Paste" : slot.label;
-      return <Key shapeOf={shapeOf} label={slot.label} icon={icon} accessibilityLabel={icon ? name : undefined} tonal={slot.arrow} onPress={() => onKey(slot.key)} />;
+      return <Key shapeOf={shapeOf} label={slot.label} icon={icon} accessibilityLabel={icon ? name : slot.spoken} tonal={slot.arrow} onPress={() => onKey(slot.key)} />;
     }
   }
 }
