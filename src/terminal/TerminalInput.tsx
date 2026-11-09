@@ -354,7 +354,7 @@ function Key({ label = "", icon, onPress, active, tonal, disabled, shapeOf, acce
       style={styles.key}
       surface={[styles.keySurface, { backgroundColor: fill, opacity: disabled ? 0.38 : 1 }]}
     >
-      {icon ? <Ionicons name={icon} size={20} color={ink} /> : <Text style={[styles.keyText, { color: ink }, /^\d$/.test(label) && styles.keyDigit]}>{label}</Text>}
+      {icon ? <Ionicons name={icon} size={20} color={ink} /> : <Text style={[styles.keyText, { color: ink }, /^\d$/.test(label) && styles.keyDigit, !/[a-z\d]/i.test(label) && styles.keySymbol]}>{label}</Text>}
     </MorphPressable>
   );
 }
@@ -398,6 +398,8 @@ const useStyles = makeStyles((colors) => ({
   keySurface: { height: CONTROL },
   keyText: { fontSize: 13, fontFamily: fonts.monoMedium, fontWeight: "normal" },
   keyDigit: { fontSize: 15 },
+  // Symbol-only labels like ⇧⏎ fall back to a thin font that reads small at 13.
+  keySymbol: { fontSize: 20 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingTop: space.md },
   field: {
     flex: 1,
