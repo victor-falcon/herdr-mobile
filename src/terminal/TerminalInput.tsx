@@ -84,7 +84,13 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
     resetMirror();
     if (name === "paste") return void paste();
     if (message && name === "ctrl+enter" && latest.current.trim()) return void sendNow();
-    if (name.length === 1) return typeRaw(name); // types itself, with ctrl applied like the keyboard
+    if (name.length === 1) {
+      // A key that types itself, with ctrl applied like the keyboard does.
+      const control = ctrl ? withCtrl(name) : null;
+      if (control !== null) setCtrl(false);
+      if (!write(control ?? name)) call("terminal.keys", { keys: [control === null ? name : `ctrl+${name}`] }).catch(fail);
+      return;
+    }
     if (!write(keyBytes(name, terminal.current?.appCursor() ?? false))) call("terminal.keys", { keys: [hcKeyName(name)] }).catch(fail);
   };
 
