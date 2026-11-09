@@ -499,8 +499,20 @@ function ModRow({ name, nested, onLongPress }: { name: string; nested: boolean; 
   );
 }
 
-/** `urgentFirst`: an agent that needs you says why ahead of the hint. */
-export function AgentRow({ session, nested = false, branch, hint, urgentFirst, onPress, onLongPress }: RowProps & { session: Session; urgentFirst?: boolean }) {
+/**
+ * `urgentFirst`: an agent that needs you says why ahead of the hint.
+ * `trailing` sits under the time, at the end of the second line (the inbox's subagents chip).
+ */
+export function AgentRow({
+  session,
+  nested = false,
+  branch,
+  hint,
+  urgentFirst,
+  trailing,
+  onPress,
+  onLongPress,
+}: RowProps & { session: Session; urgentFirst?: boolean; trailing?: ReactNode }) {
   const styles = useStyles();
   const tree = useBranch(branch, nested);
   const sub = (branch?.depth ?? 0) > 0;
@@ -523,7 +535,10 @@ export function AgentRow({ session, nested = false, branch, hint, urgentFirst, o
         </Text>
         <Supporting hint={hint} text={msg} style={blocked && styles.blocked} textFirst={urgentFirst && blocked} />
       </View>
-      <Text style={styles.age}>{ago(t.status_ms ?? t.created_ms)}</Text>
+      <View style={styles.trailing}>
+        <Text style={styles.age}>{ago(t.status_ms ?? t.created_ms)}</Text>
+        {trailing}
+      </View>
     </Pressable>
   );
 }
@@ -553,6 +568,7 @@ const useStyles = makeStyles((colors) => ({
   tabHead: { flexDirection: "row", alignItems: "center", gap: gap.sm, minHeight: 40, paddingHorizontal: gap.md, paddingTop: 10, paddingBottom: 2 },
   tabName: { ...emphasized.titleSmall, color: colors.onSurfaceVariant, flexShrink: 1 },
   text: { flex: 1, minWidth: 0, gap: 2 },
+  trailing: { alignItems: "flex-end", gap: gap.xs },
   title: { ...typography.bodyLarge, color: colors.onSurface },
   subTitle: { ...typography.bodyMedium, color: colors.onSurface },
   msg: { ...typography.bodyMedium, color: colors.onSurfaceVariant },

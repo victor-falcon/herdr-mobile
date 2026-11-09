@@ -1,7 +1,7 @@
 // How the Spaces list hangs what an agent launched (`herdr.parent`) under it, and how the inbox groups agents.
 import { expect, test } from "vitest";
 import type { HerdrDoc, HerdrTab, Session, Target } from "../src/hc/fleet";
-import { inbox, spaces, type Space, type TabItem } from "../src/spaces";
+import { inbox, spaces, subsLabel, type Space, type TabItem } from "../src/spaces";
 
 const targets: Target[] = [
   { coreId: "mac", label: "mac", linkId: "mac" },
@@ -164,12 +164,81 @@ test("in the inbox, who needs you and waited longest leads; elsewhere the latest
   expect(groups(docs, sessions)).toEqual(["Needs you: mac:t2@sp_a mac:t1@sp_a", "Done: mac:t4@sp_a mac:t3@sp_a", "Working: mac:t5@sp_a mac:t6@sp_a"]);
 });
 
-test("the inbox lists sub-agents and agents of child spaces, each in the space it runs in", () => {
+const subsOf = (docs: Record<string, HerdrDoc>, sessions: Session[], key: string) => {
+  const a = inbox(spaces(docs, targets, sessions))
+    .flatMap((g) => g.agents)
+    .find((x) => x.session.key === key);
+  return { subs: a?.subs.map((x) => x.session.key), summary: a?.summary };
+};
+
+test("the inbox hides sub-agents and launched agents, transitively, on the row of the agent that started the chain", () => {
   const docs = { mac: doc({ id: "sp_main", name: "main", tabs: [tab("tb1", "t1")] }, { id: "sp_wt", name: "feature", tabs: [tab("tb2", "t2")] }) };
   const sessions = [
     session("t1", { space: "sp_main", tab: "tb1", ms: 1 }),
     session("t2", { space: "sp_wt", tab: "tb2", launcher: "mac:t1", ms: 2 }),
     session("t3", { parent: "mac:t2", ms: 3 }),
   ];
-  expect(groups(docs, sessions)).toEqual(["Working: mac:t3@sp_wt mac:t2@sp_wt mac:t1@sp_main"]);
+  expect(groups(docs, sessions)).toEqual(["Working: mac:t1@sp_main"]);
+  expect(subsOf(docs, sessions, "mac:t1")).toEqual({ subs: ["mac:t3", "mac:t2"], summary: { status: "working", n: 2, total: 2 } });
+});
+
+test("an agent whose launcher is gone, or is no agent, has its own row in the inbox", () => {
+  const docs = { mac: doc({ id: "sp_main", name: "main", tabs: [tab("tb1", "t1", "t4")] }, { id: "sp_wt", name: "feature", tabs: [tab("tb2", "t2")] }) };
+  const sessions = [
+    session("t1", { space: "sp_main", tab: "tb1", state: "finished" }),
+    session("t2", { space: "sp_wt", tab: "tb2", launcher: "mac:t1", ms: 2 }),
+    session("t4", { space: "sp_main", tab: "tb1", agent: false }),
+    session("t5", { parent: "mac:t4", ms: 5 }),
+  ];
+  expect(groups(docs, sessions)).toEqual(["Working: mac:t5@sp_main mac:t2@sp_wt"]);
+  expect(subsOf(docs, sessions, "mac:t2").summary).toBeNull();
+});
+
+test("agents that launched each other in a loop keep their own rows", () => {
+  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1", "t2")] }) };
+  const sessions = [
+    session("t1", { space: "sp_a", tab: "tb1", launcher: "mac:t2", ms: 1 }),
+    session("t2", { space: "sp_a", tab: "tb1", launcher: "mac:t1", ms: 2 }),
+    session("t3", { space: "sp_a", tab: "tb1", launcher: "mac:t1", ms: 3 }),
+  ];
+  expect(groups(docs, sessions)).toEqual(["Working: mac:t3@sp_a mac:t2@sp_a mac:t1@sp_a"]);
+});
+
+test("a parent moves to its most urgent subagent's group when that one outranks its own", () => {
+  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1", "t2")] }) };
+  const sessions = [
+    // A working parent with a blocked subagent needs you.
+    session("t1", { space: "sp_a", tab: "tb1", status: "working", ms: 10 }),
+    session("t3", { parent: "mac:t1", status: "error", ms: 11 }),
+    session("t4", { parent: "mac:t1", status: "working", ms: 12 }),
+    // A done parent with a working subagent stays in Done: working ranks lower.
+    session("t2", { space: "sp_a", tab: "tb1", status: "done", ms: 20 }),
+    session("t5", { parent: "mac:t2", status: "working", ms: 21 }),
+  ];
+  expect(groups(docs, sessions)).toEqual(["Needs you: mac:t1@sp_a", "Done: mac:t2@sp_a"]);
+  expect(subsOf(docs, sessions, "mac:t1")).toEqual({ subs: ["mac:t3", "mac:t4"], summary: { status: "blocked", n: 1, total: 2 } });
+  expect(subsOf(docs, sessions, "mac:t2").summary).toEqual({ status: "working", n: 1, total: 1 });
+});
+
+test("a parent's subagents read most urgent first: blocked, working, done, idle, then the latest change", () => {
+  const docs = { mac: doc({ id: "sp_a", name: "a", tabs: [tab("tb1", "t1")] }) };
+  const sessions = [
+    session("t1", { space: "sp_a", tab: "tb1", status: "idle", ms: 1 }),
+    session("s1", { parent: "mac:t1", status: "idle", ms: 50 }),
+    session("s2", { parent: "mac:t1", status: "done", ms: 40 }),
+    session("s3", { parent: "mac:t1", status: "done", ms: 45 }),
+    session("s4", { parent: "mac:t1", status: "working", ms: 10 }),
+  ];
+  expect(groups(docs, sessions)).toEqual(["Working: mac:t1@sp_a"]);
+  expect(subsOf(docs, sessions, "mac:t1")).toEqual({ subs: ["mac:s4", "mac:s3", "mac:s2", "mac:s1"], summary: { status: "working", n: 1, total: 4 } });
+  const idle = [sessions[0], session("s1", { parent: "mac:t1", status: "idle" }), session("s2", { parent: "mac:t1", status: "idle" })];
+  expect(subsOf(docs, idle, "mac:t1").summary).toEqual({ status: "idle", n: 2, total: 2 });
+});
+
+test("the subagents chip says how many there are and what the most urgent are doing", () => {
+  expect(subsLabel({ status: "blocked", n: 1, total: 3 })).toBe("3 subagents, 1 needs you");
+  expect(subsLabel({ status: "blocked", n: 2, total: 3 })).toBe("3 subagents, 2 need you");
+  expect(subsLabel({ status: "blocked", n: 2, total: 2 })).toBe("2 subagents, all need you");
+  expect(subsLabel({ status: "idle", n: 2, total: 2 })).toBe("2 subagents, all idle");
+  expect(subsLabel({ status: "working", n: 1, total: 1 })).toBe("1 subagent, 1 working");
 });

@@ -306,8 +306,21 @@ function nestLaunched(all: Space[]) {
   }
 }
 
-/** An agent the inbox lists, and the space it runs in (null when it is in none). */
-export type InboxAgent = { session: Session; space: Space | null };
+/** How urgent a status is, most first, as the inbox sees it. */
+export type InboxStatus = "blocked" | "working" | "done" | "idle";
+
+/** What an agent's subagents are up to: the most urgent status among them, how many have it, and how many there are. */
+export type SubSummary = { status: InboxStatus; n: number; total: number };
+
+/** An agent, and the space it runs in (null when it is in none). */
+export type PlacedAgent = { session: Session; space: Space | null };
+
+/**
+ * An agent the inbox lists. `subs` are the agents it launched, and theirs in
+ * turn, that are still running: the inbox leaves them out and shows them on
+ * this row, most urgent first.
+ */
+export type InboxAgent = PlacedAgent & { subs: PlacedAgent[]; summary: SubSummary | null };
 
 export type InboxGroupKey = "needs-you" | "done" | "working" | "idle";
 export type InboxGroup = { key: InboxGroupKey; label: string; agents: InboxAgent[] };
@@ -320,11 +333,11 @@ const INBOX_GROUPS: { key: InboxGroupKey; label: string; oldestFirst?: boolean }
   { key: "idle", label: "Idle" },
 ];
 
-function inboxGroupOf(s: Session): InboxGroupKey {
+export function inboxStatus(s: Session): InboxStatus {
   switch (s.terminal.status?.state) {
     case "blocked":
     case "error":
-      return "needs-you";
+      return "blocked";
     case "done":
       return "done";
     case "working":
@@ -334,15 +347,93 @@ function inboxGroupOf(s: Session): InboxGroupKey {
   }
 }
 
+const GROUP_OF: Record<InboxStatus, InboxGroupKey> = { blocked: "needs-you", done: "done", working: "working", idle: "idle" };
 /**
- * Every agent of every space and machine, sub-agents too, in groups most urgent
- * first. An agent that needs you and has waited longest leads its group; in the
- * others the latest change comes first. Empty groups are left out.
+ * Which group outranks which: a parent moves to its subagents' group only when
+ * it is higher here. Done outranks working: something finished is worth a look.
+ */
+const GROUP_RANK: Record<InboxStatus, number> = { blocked: 3, done: 2, working: 1, idle: 0 };
+/**
+ * How much a subagent's status asks for you: what its launcher's chip and sheet
+ * lead with. Unlike the groups, a subagent at work counts above one that is
+ * done, as on the desktop.
+ */
+const SUB_RANK: Record<InboxStatus, number> = { blocked: 3, working: 2, done: 1, idle: 0 };
+const BY_SUB_RANK = (Object.keys(SUB_RANK) as InboxStatus[]).sort((a, b) => SUB_RANK[b] - SUB_RANK[a]);
+
+/** The agent that launched this one: the session that started it (an hc sub-agent) or its `herdr.parent`. */
+function launcherOf(s: Session, agents: Map<string, unknown>): string | null {
+  if (s.parentKey && s.parentKey !== s.key && agents.has(s.parentKey)) return s.parentKey;
+  if (s.launcherKey && s.launcherKey !== s.key && agents.has(s.launcherKey)) return s.launcherKey;
+  return null;
+}
+
+function summarize(subs: Session[]): SubSummary | null {
+  if (!subs.length) return null;
+  const status = BY_SUB_RANK.find((st) => subs.some((s) => inboxStatus(s) === st))!;
+  return { status, n: subs.filter((s) => inboxStatus(s) === status).length, total: subs.length };
+}
+
+const WORDS: Record<InboxStatus, [one: string, many: string]> = { blocked: ["needs you", "need you"], working: ["working", "working"], done: ["done", "done"], idle: ["idle", "idle"] };
+
+/** What a status says of one subagent: "needs you", "working". */
+export const statusWords = (status: InboxStatus) => WORDS[status][0];
+
+/** The chip's spoken label: "3 subagents, 1 needs you"; "2 subagents, all idle". */
+export function subsLabel({ status, n, total }: SubSummary): string {
+  const all = `${total} subagent${total === 1 ? "" : "s"}`;
+  const [one, many] = WORDS[status];
+  if (n === total && total > 1) return `${all}, all ${many}`;
+  return `${all}, ${n} ${n === 1 ? one : many}`;
+}
+
+/**
+ * Every agent of every space and machine, in groups most urgent first, as the
+ * desktop sidebar's Inbox has them with subagents hidden: an agent another
+ * running agent launched has no row of its own but counts on the row of the
+ * agent at the top of its chain. A parent sits in its most urgent subagent's
+ * group when that one outranks its own. An agent that needs you and has waited
+ * longest leads its group; in the others the latest change comes first. Empty
+ * groups are left out.
  */
 export function inbox({ spaces: list, loose }: { spaces: Space[]; loose: Session[] }): InboxGroup[] {
-  const all: InboxAgent[] = [...list.flatMap((space) => space.agents.map((session) => ({ session, space }))), ...loose.map((session) => ({ session, space: null }))];
+  const all: PlacedAgent[] = [...list.flatMap((space) => space.agents.map((session) => ({ session, space }))), ...loose.map((session) => ({ session, space: null }))];
+  const byKey = new Map(all.map((a) => [a.session.key, a]));
+  /**
+   * The agent at the top of a chain of launchers, or null when the agent is at
+   * the top itself. A chain that runs into a loop has no top: its agents keep
+   * their own rows.
+   */
+  const rootOf = (s: Session): string | null => {
+    const seen = new Set([s.key]);
+    let at = s;
+    let up = launcherOf(at, byKey);
+    while (up) {
+      if (seen.has(up)) return null;
+      seen.add(up);
+      at = byKey.get(up)!.session;
+      up = launcherOf(at, byKey);
+    }
+    return at === s ? null : at.key;
+  };
+  const subsOf = new Map<string, PlacedAgent[]>();
+  const tops: PlacedAgent[] = [];
+  for (const a of all) {
+    const root = rootOf(a.session);
+    if (root) subsOf.set(root, [...(subsOf.get(root) ?? []), a]);
+    else tops.push(a);
+  }
+  const bySubRank = (x: Session, y: Session) => SUB_RANK[inboxStatus(y)] - SUB_RANK[inboxStatus(x)] || changed(y) - changed(x) || x.key.localeCompare(y.key);
+  const shown: InboxAgent[] = tops.map((a) => {
+    const subs = (subsOf.get(a.session.key) ?? []).sort((x, y) => bySubRank(x.session, y.session));
+    return { ...a, subs, summary: summarize(subs.map((x) => x.session)) };
+  });
+  const groupOf = ({ session, summary }: InboxAgent): InboxGroupKey => {
+    const own = inboxStatus(session);
+    return GROUP_OF[summary && GROUP_RANK[summary.status] > GROUP_RANK[own] ? summary.status : own];
+  };
   return INBOX_GROUPS.map(({ key, label, oldestFirst }) => {
-    const agents = all.filter((a) => inboxGroupOf(a.session) === key);
+    const agents = shown.filter((a) => groupOf(a) === key);
     const order = oldestFirst ? 1 : -1;
     agents.sort((a, b) => order * (changed(a.session) - changed(b.session)) || a.session.key.localeCompare(b.session.key));
     return { key, label, agents };
