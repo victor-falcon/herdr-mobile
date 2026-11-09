@@ -43,7 +43,9 @@ const tab = (id: string, ...terminals: string[]): HerdrTab => ({
 const doc = (...list: { id: string; name: string; tabs: HerdrTab[] }[]): HerdrDoc => ({ spaces: list.map((s) => ({ ...s, folder: `/work/${s.name}` })) });
 
 const rows = (sp: Space | undefined) =>
-  (sp?.tabs ?? []).flatMap((t) => t.items.map((i: TabItem) => (i.kind === "session" ? `${"  ".repeat(i.depth)}${i.session.key}${i.from ? ` <${i.from.space.id}/${i.from.tab.id}>` : ""}` : `mod:${i.name}`)));
+  (sp?.tabs ?? []).flatMap((t) =>
+    t.items.map((i: TabItem) => (i.kind === "session" ? `${"  ".repeat(i.depth)}${i.session.key}${i.from ? ` <${i.from.space.id}/${i.from.tab.id}>` : ""}` : `mod:${i.name}`)),
+  );
 const shown = (list: Space[]) => list.filter((s) => !s.nestedUnder);
 const byId = (list: Space[], id: string) => list.find((s) => s.id === id);
 
@@ -86,7 +88,12 @@ test("two spaces that launched each other don't make a loop: one keeps its row a
   const { spaces: list } = spaces(docs, targets, sessions);
   const visible = shown(list);
   expect(visible).toHaveLength(1);
-  expect(visible.flatMap(rows).map((r) => r.trim().split(" ")[0]).sort()).toEqual(["mac:t1", "mac:t2"]);
+  expect(
+    visible
+      .flatMap(rows)
+      .map((r) => r.trim().split(" ")[0])
+      .sort(),
+  ).toEqual(["mac:t1", "mac:t2"]);
 });
 
 test("a launcher on another machine takes the child space under it", () => {
