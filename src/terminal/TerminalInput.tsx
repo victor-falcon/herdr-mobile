@@ -83,6 +83,7 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
   const pressKey = (name: string) => {
     resetMirror();
     if (name === "paste") return void paste();
+    if (message && name === "ctrl+enter" && latest.current.trim()) return void sendNow();
     if (ctrl && name.length === 1) {
       setCtrl(false);
       name = `ctrl+${name}`;
@@ -125,25 +126,34 @@ export const TerminalInput = forwardRef<TerminalInputHandle, Props>(function Ter
     resetMirror();
   };
 
-  const send = async (message: string, force = false) => {
+  /** Sends the draft, pasted and submitted; `then` runs once it went out. */
+  const send = async (draft: string, force = false, then?: () => void) => {
     cancelPendingSend();
-    const body = message.trimEnd();
+    const body = draft.trimEnd();
     if (!body.trim() || sending) return;
     setSending(true);
+    let sent = false;
     try {
       await call("terminal.send", { text: body, force });
       changeText("");
+      sent = true;
     } catch (e) {
       if (!force && e instanceof HcError && /block/i.test(`${e.kind} ${e.message}`)) {
         Alert.alert("It is waiting on a question", "Typing now may answer its dialog.", [
           { text: "Cancel", style: "cancel" },
-          { text: "Send anyway", onPress: () => void send(body, true) },
+          { text: "Send anyway", onPress: () => void send(body, true, then) },
         ]);
       } else fail(e);
     } finally {
       setSending(false);
     }
+    if (sent) then?.();
   };
+
+  // ^⏎ on a drafted message: sent as usual, which queues it behind a working
+  // agent, then ctrl+enter, which has the agent take it right away (or does
+  // nothing when it is idle).
+  const sendNow = () => send(latest.current, false, () => write(keyBytes("ctrl+enter", false)) || call("terminal.keys", { keys: ["ctrl+enter"] }).catch(fail));
 
   // Enter types a newline, and a lone newline the user typed sends. Dictation
   // apps paste line breaks as Enter too, but right after or right before a burst

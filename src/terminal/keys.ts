@@ -2,7 +2,7 @@
 // program's cursor-key mode (DECCKM), which xterm reports from the page.
 
 export type KeyName =
-  | "esc" | "enter" | "shift+enter" | "tab" | "shift+tab" | "backspace"
+  | "esc" | "enter" | "shift+enter" | "ctrl+enter" | "tab" | "shift+tab" | "backspace"
   | "up" | "down" | "left" | "right" | "home" | "end" | "pageup" | "pagedown"
   | "ctrl+c" | "ctrl+d" | "ctrl+r" | "ctrl+z" | "ctrl+l";
 
@@ -33,7 +33,7 @@ export const KEY_ROWS: BarKey[][] = [
     { key: "keyboard", label: "keyboard" },
     { key: "paste", label: "paste" },
     { key: "1", label: "1" },
-    { key: "2", label: "2" },
+    { key: "ctrl+enter", label: "^⏎", spoken: "Control enter" },
     { key: "shift+enter", label: "⇧⏎", spoken: "Shift enter" },
     { key: "left", label: "←", arrow: true },
     { key: "down", label: "↓", arrow: true },
@@ -57,6 +57,12 @@ export function keyBytes(key: KeyName | string, appCursor: boolean): string {
       // ESC CR, what a terminal set up for coding agents sends for shift+enter:
       // Claude Code and similar prompts insert a new line instead of submitting.
       return "\x1b\r";
+    case "ctrl+enter":
+      // ctrl+enter has no legacy encoding (xterm sends a plain CR), so this is
+      // the CSI u form. Claude Code reads it as "send now": it interrupts the
+      // turn and submits what's typed, or the queued messages, instead of
+      // queueing behind the turn. hc's own ctrl+enter (CSI 27;5;13~) does too.
+      return "\x1b[13;5u";
     case "tab":
       return "\t";
     case "shift+tab":
