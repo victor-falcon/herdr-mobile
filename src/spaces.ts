@@ -306,8 +306,18 @@ function nestLaunched(all: Space[]) {
   }
 }
 
-/** An agent the inbox lists, and the space it runs in (null when it is in none). */
-export type InboxAgent = { session: Session; space: Space | null };
+/** How urgent a status is, most first, as the inbox sees it. */
+export type InboxStatus = "blocked" | "working" | "done" | "idle";
+
+/** What an agent's subagents are up to: the most urgent status among them, how many have it, and how many there are. */
+export type SubSummary = { status: InboxStatus; n: number; total: number };
+
+/**
+ * An agent the inbox lists, and the space it runs in (null when it is in none).
+ * `subs` are the agents it launched, and theirs in turn, that are still running:
+ * the inbox leaves them out and shows them on their launcher's row, most urgent first.
+ */
+export type InboxAgent = { session: Session; space: Space | null; subs: InboxAgent[]; summary: SubSummary | null };
 
 export type InboxGroupKey = "needs-you" | "done" | "working" | "idle";
 export type InboxGroup = { key: InboxGroupKey; label: string; agents: InboxAgent[] };
@@ -320,11 +330,11 @@ const INBOX_GROUPS: { key: InboxGroupKey; label: string; oldestFirst?: boolean }
   { key: "idle", label: "Idle" },
 ];
 
-function inboxGroupOf(s: Session): InboxGroupKey {
+export function inboxStatus(s: Session): InboxStatus {
   switch (s.terminal.status?.state) {
     case "blocked":
     case "error":
-      return "needs-you";
+      return "blocked";
     case "done":
       return "done";
     case "working":
@@ -334,15 +344,70 @@ function inboxGroupOf(s: Session): InboxGroupKey {
   }
 }
 
+const GROUP_OF: Record<InboxStatus, InboxGroupKey> = { blocked: "needs-you", done: "done", working: "working", idle: "idle" };
+/** Which group outranks which: a parent moves to its subagents' group only when it is higher here. */
+const GROUP_RANK: Record<InboxStatus, number> = { blocked: 3, done: 2, working: 1, idle: 0 };
+/** How much a subagent's status asks for you: what its launcher's chip and sheet lead with. */
+const SUB_RANK: Record<InboxStatus, number> = { blocked: 3, working: 2, done: 1, idle: 0 };
+
+/** The agent that launched this one: the session that started it (an hc sub-agent) or its `herdr.parent`. */
+function launcherOf(s: Session, agents: Map<string, unknown>): string | null {
+  if (s.parentKey && s.parentKey !== s.key && agents.has(s.parentKey)) return s.parentKey;
+  if (s.launcherKey && s.launcherKey !== s.key && agents.has(s.launcherKey)) return s.launcherKey;
+  return null;
+}
+
+function summarize(subs: InboxAgent[]): SubSummary | null {
+  if (!subs.length) return null;
+  for (const status of ["blocked", "working", "done"] as const) {
+    const n = subs.filter((a) => inboxStatus(a.session) === status).length;
+    if (n) return { status, n, total: subs.length };
+  }
+  return { status: "idle", n: subs.length, total: subs.length };
+}
+
 /**
- * Every agent of every space and machine, sub-agents too, in groups most urgent
- * first. An agent that needs you and has waited longest leads its group; in the
- * others the latest change comes first. Empty groups are left out.
+ * Every agent of every space and machine, in groups most urgent first, as the
+ * desktop sidebar's Inbox has them with subagents hidden: an agent another
+ * running agent launched has no row of its own but counts on the row of the
+ * agent at the top of its chain. A parent sits in its most urgent subagent's
+ * group when that one outranks its own. An agent that needs you and has waited
+ * longest leads its group; in the others the latest change comes first. Empty
+ * groups are left out.
  */
 export function inbox({ spaces: list, loose }: { spaces: Space[]; loose: Session[] }): InboxGroup[] {
-  const all: InboxAgent[] = [...list.flatMap((space) => space.agents.map((session) => ({ session, space }))), ...loose.map((session) => ({ session, space: null }))];
+  const all: InboxAgent[] = [
+    ...list.flatMap((space) => space.agents.map((session) => ({ session, space, subs: [], summary: null }))),
+    ...loose.map((session) => ({ session, space: null, subs: [], summary: null })),
+  ];
+  const byKey = new Map(all.map((a) => [a.session.key, a]));
+  // The agent at the top of each one's chain of launchers; an agent in a loop keeps its own row.
+  const rootOf = (a: InboxAgent): InboxAgent => {
+    const seen = new Set<string>();
+    let at = a;
+    for (let up = launcherOf(at.session, byKey); up; up = launcherOf(at.session, byKey)) {
+      if (seen.has(at.session.key)) return a;
+      seen.add(at.session.key);
+      at = byKey.get(up)!;
+    }
+    return at;
+  };
+  const shown: InboxAgent[] = [];
+  for (const a of all) {
+    const root = rootOf(a);
+    if (root === a) shown.push(a);
+    else root.subs.push(a);
+  }
+  for (const a of shown) {
+    a.subs.sort((x, y) => SUB_RANK[inboxStatus(y.session)] - SUB_RANK[inboxStatus(x.session)] || changed(y.session) - changed(x.session) || x.session.key.localeCompare(y.session.key));
+    a.summary = summarize(a.subs);
+  }
+  const groupOf = (a: InboxAgent): InboxGroupKey => {
+    const own = inboxStatus(a.session);
+    return GROUP_OF[a.summary && GROUP_RANK[a.summary.status] > GROUP_RANK[own] ? a.summary.status : own];
+  };
   return INBOX_GROUPS.map(({ key, label, oldestFirst }) => {
-    const agents = all.filter((a) => inboxGroupOf(a.session) === key);
+    const agents = shown.filter((a) => groupOf(a) === key);
     const order = oldestFirst ? 1 : -1;
     agents.sort((a, b) => order * (changed(a.session) - changed(b.session)) || a.session.key.localeCompare(b.session.key));
     return { key, label, agents };
