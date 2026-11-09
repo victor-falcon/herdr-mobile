@@ -24,7 +24,7 @@ type Props = {
 };
 
 /** What a row closes and renames: a whole tab, or one pane of a split tab. */
-type RowTarget = {
+export type RowTarget = {
   title: string;
   space: Space | null;
   tab: SpaceTab | null;
@@ -73,6 +73,17 @@ function sessionTarget(space: Space, tab: SpaceTab, item: Extract<TabItem, { kin
   return { ...wholeTab(space, tab), title, lead: s };
 }
 
+/** What an agent's row closes and renames wherever it is listed: the same as its row in `space` on the Spaces list. */
+export function agentTarget(s: Session, space: Space | null): RowTarget {
+  for (const tab of space?.tabs ?? []) {
+    for (const item of tab.items) {
+      if (item.kind !== "session" || item.session.key !== s.key) continue;
+      return item.from ? sessionTarget(item.from.space, ownTab(item.from.tab), item) : sessionTarget(space!, ownTab(tab), item);
+    }
+  }
+  return { title: agentTitle(s), space: null, tab: null, sessions: [s], scope: "pane", lead: s };
+}
+
 /** How a row joins the tree drawn down the left of a tab: one entry per level above it, true where a line runs on past it. */
 type Branch = { depth: number; last: boolean; through: boolean[]; parent: boolean };
 
@@ -99,17 +110,10 @@ function branchesOf(items: TabItem[]): Branch[] {
 }
 
 export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Props) {
-  const colors = useColors();
   const styles = useStyles();
-  const [menu, setMenu] = useState<RowTarget | null>(null);
-  const [renaming, setRenaming] = useState<Renaming | null>(null);
+  const rows = useRowMenu();
   const [spaceMenu, setSpaceMenu] = useState<Space | null>(null);
-
-  const close = (t: RowTarget) => {
-    const what = t.scope === "tab" ? "Its programs end and the tab closes on every screen." : "Its program ends and the pane closes on every screen.";
-    void confirmClose(t.title, t.sessions, what);
-  };
-  const actions: Actions = { onSelect, onMenu: setMenu, onClose: close };
+  const actions: Actions = { onSelect, onMenu: rows.open, onClose: rows.close };
   // A child space has no row of its own: its tabs hang under the agent that launched them.
   const shown = spaces.filter((sp) => !sp.nestedUnder);
 
@@ -141,7 +145,7 @@ export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Pro
               <IconButton icon="add" variant="tonal" size={48} label={`New tab in ${sp.name}`} onPress={() => onStart(sp)} />
             </View>
             {sp.tabs.length > 0 && (
-              <Card>
+              <Card inset={TEXT_INSET}>
                 {sp.tabs.map((tab) => (
                   <TabRows key={tab.key} space={sp} tab={tab} actions={actions} />
                 ))}
@@ -157,12 +161,12 @@ export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Pro
               Not in a space
             </Text>
           </View>
-          <Card>
+          <Card inset={TEXT_INSET}>
             {loose.map((s) => {
-              const target: RowTarget = { title: agentTitle(s), space: null, tab: null, sessions: [s], scope: "pane", lead: s };
+              const target = agentTarget(s, null);
               return (
-                <Swipe key={s.key} onClose={() => close(target)}>
-                  <AgentRow session={s} onPress={() => onSelect(s)} onLongPress={() => setMenu(target)} />
+                <Swipe key={s.key} onClose={() => rows.close(target)}>
+                  <AgentRow session={s} onPress={() => onSelect(s)} onLongPress={() => rows.open(target)} />
                 </Swipe>
               );
             })}
@@ -170,6 +174,50 @@ export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Pro
         </View>
       )}
 
+      <Sheet visible={!!spaceMenu} onClose={() => setSpaceMenu(null)}>
+        {spaceMenu && (
+          <>
+            <SheetHeader title={spaceMenu.name} meta={spaceMenu.folder ? shortPath(spaceMenu.folder) : undefined} icon="folder-outline" />
+            <SheetActions>
+              <SheetAction
+                icon="pencil"
+                label="Rename space"
+                detail={`Now “${spaceMenu.name}”`}
+                onPress={() => {
+                  const sp = spaceMenu;
+                  rows.rename({
+                    title: "Rename space",
+                    label: "Space name",
+                    placeholder: `Leave empty to use ${folderName(sp.folder) || "its folder"}`,
+                    initial: sp.name,
+                    save: (name) => fleet.renameSpace(sp.target, sp.id, name),
+                  });
+                  setSpaceMenu(null);
+                }}
+              />
+            </SheetActions>
+          </>
+        )}
+      </Sheet>
+      {rows.sheets}
+    </View>
+  );
+}
+
+/**
+ * The long-press menu of a row (rename its tab, close it) and the rename sheet,
+ * shared by the Spaces list and the inbox. Render `sheets` once.
+ */
+export function useRowMenu() {
+  const colors = useColors();
+  const [menu, setMenu] = useState<RowTarget | null>(null);
+  const [renaming, setRenaming] = useState<Renaming | null>(null);
+  const close = (t: RowTarget) => {
+    const what = t.scope === "tab" ? "Its programs end and the tab closes on every screen." : "Its program ends and the pane closes on every screen.";
+    void confirmClose(t.title, t.sessions, what);
+  };
+  const sheets = (
+    <>
       <Sheet visible={!!menu} onClose={() => setMenu(null)}>
         {menu && (
           <>
@@ -223,34 +271,10 @@ export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Pro
           </>
         )}
       </Sheet>
-      <Sheet visible={!!spaceMenu} onClose={() => setSpaceMenu(null)}>
-        {spaceMenu && (
-          <>
-            <SheetHeader title={spaceMenu.name} meta={spaceMenu.folder ? shortPath(spaceMenu.folder) : undefined} icon="folder-outline" />
-            <SheetActions>
-              <SheetAction
-                icon="pencil"
-                label="Rename space"
-                detail={`Now “${spaceMenu.name}”`}
-                onPress={() => {
-                  const sp = spaceMenu;
-                  setRenaming({
-                    title: "Rename space",
-                    label: "Space name",
-                    placeholder: `Leave empty to use ${folderName(sp.folder) || "its folder"}`,
-                    initial: sp.name,
-                    save: (name) => fleet.renameSpace(sp.target, sp.id, name),
-                  });
-                  setSpaceMenu(null);
-                }}
-              />
-            </SheetActions>
-          </>
-        )}
-      </Sheet>
       <RenameSheet renaming={renaming} onClose={() => setRenaming(null)} />
-    </View>
+    </>
   );
+  return { open: setMenu, close, rename: setRenaming, sheets };
 }
 
 /** What the rename sheet edits: a tab or a space. */
@@ -349,7 +373,7 @@ const REVEAL = 96; // how far the row slides to show Close
 const TRIGGER = 72; // past this, letting go asks to close
 
 /** Slide a row left to show Close; let go past the mark and it asks first. */
-function Swipe({ children, onClose, disabled, nested }: { children: ReactNode; onClose: () => void; disabled?: boolean; nested?: boolean }) {
+export function Swipe({ children, onClose, disabled, nested }: { children: ReactNode; onClose: () => void; disabled?: boolean; nested?: boolean }) {
   const colors = useColors();
   const styles = useStyles();
   const x = useRef(new Animated.Value(0)).current;
@@ -394,6 +418,8 @@ const BEND = 16;
 const lineX = (pad: number, depth: number) => pad + TOP_AVATAR / 2 + (depth - 1) * CHILD_AVATAR;
 const rowPad = (nested: boolean) => (nested ? gap.md : gap.lg);
 const avatarSize = (depth: number) => (depth > 0 ? CHILD_AVATAR : TOP_AVATAR);
+/** Where a top-level row's text starts: a card's dividers start there too. */
+export const TEXT_INSET = gap.lg + TOP_AVATAR + gap.lg;
 
 /** A row's place in the tree: indented by depth, with the connector lines drawn in its left gutter. */
 function useBranch(branch: Branch | undefined, nested: boolean) {
@@ -469,7 +495,7 @@ function ModRow({ name, nested, onLongPress }: { name: string; nested: boolean; 
   );
 }
 
-function AgentRow({ session, nested = false, branch, hint, onPress, onLongPress }: RowProps & { session: Session }) {
+export function AgentRow({ session, nested = false, branch, hint, onPress, onLongPress }: RowProps & { session: Session }) {
   const styles = useStyles();
   const tree = useBranch(branch, nested);
   const sub = (branch?.depth ?? 0) > 0;
@@ -512,9 +538,9 @@ const useStyles = makeStyles((colors) => ({
   nested: { paddingHorizontal: gap.md, paddingVertical: gap.sm },
   child: { paddingVertical: gap.sm },
   branches: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0 },
-  trunk: { position: "absolute", top: 0, bottom: 0, width: 1, backgroundColor: colors.outlineVariant },
-  bend: { position: "absolute", top: 0, height: "50%", borderLeftWidth: 1, borderBottomWidth: 1, borderColor: colors.outlineVariant, borderBottomLeftRadius: shape.small },
-  stem: { position: "absolute", bottom: 0, width: 1, backgroundColor: colors.outlineVariant },
+  trunk: { position: "absolute", top: 0, bottom: 0, width: 1, backgroundColor: colors.outlineVariantSubtle },
+  bend: { position: "absolute", top: 0, height: "50%", borderLeftWidth: 1, borderBottomWidth: 1, borderColor: colors.outlineVariantSubtle, borderBottomLeftRadius: shape.small },
+  stem: { position: "absolute", bottom: 0, width: 1, backgroundColor: colors.outlineVariantSubtle },
   pressed: { backgroundColor: colors.surfaceContainerHigh },
   nestedPressed: { backgroundColor: colors.surfaceContainerHighest },
   splitOuter: { padding: gap.sm },

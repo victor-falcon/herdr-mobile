@@ -14,6 +14,8 @@ export type Settings = {
   projectDirs: string[];
   /** The agents to offer, in order; the first is the one a new project starts. */
   agents: Agent[];
+  /** What the home screen lists: spaces with their tabs, or every agent most urgent first. */
+  homeMode: "spaces" | "inbox";
 };
 
 const DEFAULTS: Settings = {
@@ -25,6 +27,7 @@ const DEFAULTS: Settings = {
     { name: "Pi", command: "pi" },
     { name: "Claude", command: "claude" },
   ],
+  homeMode: "spaces",
 };
 const KEY = "settings.v1";
 
