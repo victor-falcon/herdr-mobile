@@ -194,7 +194,8 @@ test("spaces come from each machine's Herdr layout and from labels, with sub-age
   });
 
   const names = ready.spaces.map((s) => s.name).filter((n) => ["alpha", "project", "zeta", "a"].includes(n));
-  expect(names).toEqual(["alpha", "project", "zeta", "a"]);
+  // The desktop's order; spaces it doesn't list yet come after, factories last.
+  expect(names).toEqual(["zeta", "alpha", "project", "a"]);
   expect(ready.spaces.at(-1)!.factory).toBe(true);
   const zeta = ready.spaces.find((s) => s.id === "sp_zeta")!;
   expect(zeta.agents.map((a) => a.key)).toEqual([parent, childKey]);

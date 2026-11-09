@@ -46,3 +46,21 @@ export function agentTitle(s: Session): string {
   return trimmed || raw;
 }
 
+
+/** Which agent runs in a session, for its avatar. */
+export type AgentKind = "claude" | "pi" | "other" | "terminal";
+
+export function agentKind(s: Session): AgentKind {
+  const t = s.terminal;
+  if (!t.status) return "terminal";
+  const name = (t.status.app || t.argv[0]?.split("/").pop() || "").toLowerCase();
+  if (name.includes("claude")) return "claude";
+  if (name === "pi" || name.startsWith("pi-")) return "pi";
+  return "other";
+}
+
+/** A pane's short name, as the session screen's pane chips show it. */
+export function paneName(s: Session): string {
+  const t = s.terminal;
+  return t.status?.app || t.foreground?.name || t.argv[0]?.split("/").pop() || sessionTitle(s);
+}
