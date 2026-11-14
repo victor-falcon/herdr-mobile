@@ -18,10 +18,11 @@ that reaches SSH works.
   sends esc, tab, arrows, ctrl combinations and the clipboard instantly.
   Message mode is for prose to agents: Enter sends it, and hc pastes it and
   presses Enter.
-- **Start agents:** a space's + then Pi or Claude starts it in that space's
-  folder, as a new tab there. The round + opens a project from `~/workspace`:
-  a new space with nvim, deltoids, gob and Pi, like the desktop app's
-  new-space, or a new Pi in the project's space when it has one.
+- **Spaces, tabs and panes:** New space asks which machine (when there is
+  more than one) and opens a shell in its home folder, as the desktop's new
+  space does; cd wherever you want and rename it. A space's + opens a new tab
+  with a terminal in its folder; hold a tab for a new pane beside it. Hold a
+  space or tab to rename it: a tab's name shows over its agent's own title.
 - **Manage:** interrupt, copy output, kill.
 
 ## Requirements

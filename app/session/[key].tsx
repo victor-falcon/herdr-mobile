@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet } from "../../src/fleet-store";
 import type { Session } from "../../src/hc/fleet";
 import { useSettings } from "../../src/settings";
-import { spaces as spacesOf, type TabItem } from "../../src/spaces";
+import { namedTabOf, spaces as spacesOf, type TabItem } from "../../src/spaces";
 import { TerminalInput, type TerminalInputHandle } from "../../src/terminal/TerminalInput";
 import { TerminalView, type TerminalHandle, type TerminalMode } from "../../src/terminal/TerminalView";
 import { AgentAvatar } from "../../src/ui/Avatar";
@@ -64,7 +64,8 @@ export default function SessionScreen() {
   const title = useRef("Session");
   const where = useRef("");
   if (session) {
-    title.current = agentTitle(session);
+    // The name someone gave its tab beats the title its agent sets.
+    title.current = namedTabOf(home, key) ?? agentTitle(session);
     const st = session.terminal.status;
     // An agent reads as the desktop's tab: its space, what it is doing and since when. A terminal says where it is.
     where.current = st

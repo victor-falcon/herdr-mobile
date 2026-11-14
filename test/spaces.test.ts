@@ -1,7 +1,7 @@
 // How the Spaces list hangs what an agent launched (`herdr.parent`) under it, and how the inbox groups agents.
 import { expect, test } from "vitest";
 import type { HerdrDoc, HerdrTab, Session, Target } from "../src/hc/fleet";
-import { inbox, spaces, subsLabel, type Space, type TabItem } from "../src/spaces";
+import { inbox, namedTabOf, spaces, subsLabel, type Space, type TabItem } from "../src/spaces";
 
 const targets: Target[] = [
   { coreId: "mac", label: "mac", linkId: "mac" },
@@ -308,4 +308,17 @@ test("the subagents chip says how many there are and what the most urgent are do
   expect(subsLabel({ status: "blocked", n: 2, total: 2 })).toBe("2 subagents, all need you");
   expect(subsLabel({ status: "idle", n: 2, total: 2 })).toBe("2 subagents, all idle");
   expect(subsLabel({ status: "working", n: 1, total: 1 })).toBe("1 subagent, 1 working");
+});
+
+test("a tab's own name stands for its only pane over the agent's title; numbers, split tabs and sub-agents don't", () => {
+  const docs = {
+    mac: doc({
+      id: "sp_a",
+      name: "alpha",
+      tabs: [{ ...tab("tb1", "t1"), name: "Fix login" }, { ...tab("tb2", "t2"), name: "2" }, { ...tab("tb3", "t3", "t4"), name: "Split" }],
+    }),
+  };
+  const sessions = [session("t1"), session("t2"), session("t3"), session("t4"), session("t5", { parent: "mac:t1" })];
+  const sp = byId(spaces(docs, targets, sessions).spaces, "sp_a");
+  expect(["t1", "t2", "t3", "t4", "t5"].map((t) => namedTabOf(sp, `mac:${t}`))).toEqual(["Fix login", null, null, null, null]);
 });

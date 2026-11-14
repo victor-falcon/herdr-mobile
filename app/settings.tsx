@@ -4,16 +4,13 @@ import { router, Stack } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useFleet } from "../src/fleet-store";
-import { updateSettings, useSettings, type Agent } from "../src/settings";
+import { updateSettings, useSettings } from "../src/settings";
 import { Button } from "../src/ui/Button";
 import { ButtonGroup, GroupButton, GroupValue } from "../src/ui/ButtonGroup";
 import { Card, Row, Section } from "../src/ui/Group";
-import { IconButton } from "../src/ui/IconButton";
 import type { IconName } from "../src/ui/icons";
-import { parseProjectDirs } from "../src/project-dirs";
-import { TextField } from "../src/ui/TextField";
 import { LargeTopAppBar } from "../src/ui/TopAppBar";
-import { fonts, makeStyles, space, typography, useColors } from "../src/ui/theme";
+import { makeStyles, space, typography, useColors } from "../src/ui/theme";
 import { checkForUpdate, currentUpdate, installUpdate, updatesEnabled } from "../src/updates";
 
 export default function SettingsScreen() {
@@ -63,14 +60,6 @@ export default function SettingsScreen() {
           </Block>
         </Section>
 
-        <Section title="Projects">
-          <ProjectDirsField dirs={s.projectDirs} />
-        </Section>
-
-        <Section title="Agents">
-          <AgentsField agents={s.agents} />
-        </Section>
-
         <Section title="App">
           <Row icon="information-circle-outline" label={`Herdr Mobile ${Constants.expoConfig?.version ?? ""}`} hint={currentUpdate()}>
             {updatesEnabled && <UpdateButton />}
@@ -96,82 +85,6 @@ function Block({ icon, label, hint, children }: { icon: IconName; label: string;
         {children}
       </View>
     </View>
-  );
-}
-
-function ProjectDirsField({ dirs }: { dirs: string[] }) {
-  const styles = useStyles();
-  const [text, setText] = useState(dirs.join(", "));
-  const save = () => {
-    const next = parseProjectDirs(text);
-    setText(next.join(", "));
-    void updateSettings({ projectDirs: next });
-  };
-  return (
-    <Block
-      icon="folder-outline"
-      label="Project folders"
-      hint="Where Open a project looks on each machine, under your home folder. Separate them with commas; * matches any folder."
-    >
-      <TextField
-        label="Folders"
-        inputStyle={styles.mono}
-        value={text}
-        onChangeText={setText}
-        onBlur={save}
-        onSubmitEditing={save}
-        placeholder="~/Projects/*, ~/Code/*"
-        autoCorrect={false}
-        spellCheck={false}
-        returnKeyType="done"
-      />
-    </Block>
-  );
-}
-
-type Draft = Agent & { id: number };
-let draftId = 0;
-
-/** The agents the + sheet offers. Saved as you leave a field; rows without a command are dropped. */
-function AgentsField({ agents }: { agents: Agent[] }) {
-  const styles = useStyles();
-  const [drafts, setDrafts] = useState<Draft[]>(() => agents.map((a) => ({ ...a, id: draftId++ })));
-  const save = (next: Draft[]) => {
-    setDrafts(next);
-    void updateSettings({ agents: next.filter((d) => d.command.trim()).map((d) => ({ name: d.name.trim(), command: d.command.trim() })) });
-  };
-  const edit = (id: number, patch: Partial<Agent>) => setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
-  return (
-    <Block icon="sparkles-outline" label="Agents" hint="What + offers in a space, besides a plain terminal. The first one is what a new project starts.">
-      {drafts.map((d) => (
-        <View key={d.id} style={styles.agentRow}>
-          <TextField
-            style={styles.agentName}
-            label="Name"
-            value={d.name}
-            onChangeText={(name) => edit(d.id, { name })}
-            onBlur={() => save(drafts)}
-            autoCorrect={false}
-            spellCheck={false}
-          />
-          <TextField
-            style={styles.agentCommand}
-            label="Command"
-            inputStyle={styles.mono}
-            value={d.command}
-            onChangeText={(command) => edit(d.id, { command })}
-            onBlur={() => save(drafts)}
-            placeholder="command --flags"
-            autoCorrect={false}
-            spellCheck={false}
-          />
-          <IconButton icon="close" size={40} label={`Remove ${d.name || d.command || "agent"}`} onPress={() => save(drafts.filter((x) => x.id !== d.id))} />
-        </View>
-      ))}
-      <View style={styles.addAgent}>
-        <Button variant="tonal" icon="add" title="Add agent" onPress={() => setDrafts((ds) => [...ds, { id: draftId++, name: "", command: "" }])} />
-      </View>
-    </Block>
   );
 }
 
@@ -226,9 +139,4 @@ const useStyles = makeStyles((colors) => ({
   blockText: { gap: 2 },
   label: { ...typography.bodyLarge, color: colors.onSurface },
   hint: { ...typography.bodyMedium, color: colors.onSurfaceVariant },
-  mono: { fontFamily: fonts.mono, fontSize: 15 },
-  agentRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  agentName: { width: 84 },
-  agentCommand: { flex: 1 },
-  addAgent: { flexDirection: "row" },
 }));

@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fleet, useFleet, useMachines } from "../src/fleet-store";
-import type { Session } from "../src/hc/fleet";
+import type { Session, Target } from "../src/hc/fleet";
 import { updateSettings, useSettings, type HomeMode } from "../src/settings";
-import { inbox, spaces as spacesOf, type Space } from "../src/spaces";
+import { inbox, spaces as spacesOf } from "../src/spaces";
 import { Avatar } from "../src/ui/Avatar";
 import { Button, Fab } from "../src/ui/Button";
 import { ButtonGroup, GroupButton } from "../src/ui/ButtonGroup";
@@ -15,9 +15,9 @@ import { Card, Row } from "../src/ui/Group";
 import { IconButton } from "../src/ui/IconButton";
 import { InboxList } from "../src/ui/InboxList";
 import { explainError, linkColor } from "../src/ui/machine-display";
-import { NewSessionSheet } from "../src/ui/NewSessionSheet";
-import { ProjectSheet } from "../src/ui/ProjectSheet";
-import { SpaceList } from "../src/ui/SpaceList";
+import { startSpace } from "../src/ui/new-session";
+import { Sheet, SheetAction, SheetActions, SheetHeader } from "../src/ui/Sheet";
+import { openNew, SpaceList } from "../src/ui/SpaceList";
 import { makeStyles, shape, space, typography, useColors } from "../src/ui/theme";
 import { LargeTopAppBar } from "../src/ui/TopAppBar";
 import { installUpdate, useAvailableUpdate } from "../src/updates";
@@ -30,7 +30,6 @@ export default function Agents() {
   const mode = useSettings().homeMode;
   const setMode = (homeMode: HomeMode) => void updateSettings({ homeMode });
   const [picking, setPicking] = useState(false);
-  const [startIn, setStartIn] = useState<Space | null>(null);
   const insets = useSafeAreaInsets();
   const update = useAvailableUpdate();
   const [, tick] = useState(0);
@@ -49,6 +48,13 @@ export default function Agents() {
   const install = () => {
     if (update) installUpdate(update).catch((e) => Alert.alert("Could not update", e instanceof Error ? e.message : String(e)));
   };
+
+  // A new space opens a shell in the machine's home, as the desktop's does; with more than one machine, it asks which.
+  const startOn = (t: Target) => {
+    setPicking(false);
+    void openNew(() => startSpace(t));
+  };
+  const newSpace = () => (targets.length === 1 ? startOn(targets[0]) : setPicking(true));
 
   const open = (s: Session) => router.push({ pathname: "/session/[key]", params: { key: s.key } });
 
@@ -132,7 +138,7 @@ export default function Agents() {
         {mode === "inbox" ? (
           <InboxList groups={groups} showMachine={targets.length > 1} onSelect={open} />
         ) : (
-          <SpaceList spaces={spaces} loose={loose} showMachine={targets.length > 1} onSelect={open} onStart={setStartIn} />
+          <SpaceList spaces={spaces} loose={loose} showMachine={targets.length > 1} onSelect={open} />
         )}
 
         {/* The machines and how each is doing, at the foot of the list as in the desktop's sidebar. */}
@@ -156,13 +162,25 @@ export default function Agents() {
           </Card>
         )}
 
-        {machines.length > 0 && connected && none && mode === "inbox" && <EmptyState icon="file-tray-outline" title="No agents running" text="Tap Open project to start one." />}
-        {machines.length > 0 && connected && none && mode === "spaces" && <EmptyState icon="folder-open-outline" title="No spaces yet" text="Tap Open project to start one." />}
+        {machines.length > 0 && connected && none && mode === "inbox" && <EmptyState icon="file-tray-outline" title="No agents running" text="Tap New space to start one." />}
+        {machines.length > 0 && connected && none && mode === "spaces" && <EmptyState icon="folder-open-outline" title="No spaces yet" text="Tap New space to start one." />}
       </ScrollView>
 
-      {connected && <Fab label="Open project" icon="add" onPress={() => setPicking(true)} style={[styles.fab, { bottom: insets.bottom + 16 }]} />}
-      <NewSessionSheet space={startIn} onClose={() => setStartIn(null)} />
-      <ProjectSheet visible={picking} spaces={spaces} onClose={() => setPicking(false)} />
+      {connected && <Fab label="New space" icon="add" onPress={newSpace} style={[styles.fab, { bottom: insets.bottom + 16 }]} />}
+      <Sheet visible={picking} onClose={() => setPicking(false)}>
+        <SheetHeader title="New space" meta="A shell in ~ on the machine you pick" icon="add" />
+        <SheetActions>
+          {targets.map((t) => (
+            <SheetAction
+              key={t.coreId}
+              icon="server-outline"
+              label={t.label}
+              detail={`${spaces.filter((sp) => sp.target.coreId === t.coreId && !sp.nestedUnder).length} spaces`}
+              onPress={() => startOn(t)}
+            />
+          ))}
+        </SheetActions>
+      </Sheet>
     </View>
   );
 }
