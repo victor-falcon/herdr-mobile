@@ -73,7 +73,9 @@ export default function Agents() {
           <GroupButton label="Inbox" icon="file-tray-outline" selected={mode === "inbox"} flex={1} onPress={() => setMode("inbox")} />
         </ButtonGroup>
       )}
+      {/* The rows' sheets are React children of this list, so it would take the first tap on a sheet's button to close the keyboard. */}
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 120 }]}
         refreshControl={<RefreshControl refreshing={false} onRefresh={() => fleet.reconnect()} tintColor={colors.primary} colors={[colors.primary]} progressBackgroundColor={colors.surfaceContainerHigh} />}
       >

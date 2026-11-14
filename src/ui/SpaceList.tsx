@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useRef, useState, type ReactNode } from "react";
-import { Alert, Animated, PanResponder, Pressable, Text, View, type StyleProp, type TextStyle } from "react-native";
+import { Alert, Animated, Keyboard, PanResponder, Pressable, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { fleet } from "../fleet-store";
 import type { Session } from "../hc/fleet";
 import { updateSettings, useSettings } from "../settings";
@@ -345,6 +345,7 @@ function RenameSheet({ renaming, onClose }: { renaming: Renaming | null; onClose
   }
   const save = async () => {
     if (!renaming) return;
+    Keyboard.dismiss();
     setSaving(true);
     try {
       await renaming.save(name);
