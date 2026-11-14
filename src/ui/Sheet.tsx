@@ -10,12 +10,12 @@ import { useKeyboardHeight } from "./keyboard";
 import { segmentCorners, withPositions, type Position } from "./press";
 import { emphasized, makeStyles, shape, space, typography, useColors } from "./theme";
 
-export function Sheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
+export function Sheet({ visible, onClose, onShow, children }: { visible: boolean; onClose: () => void; onShow?: () => void; children: ReactNode }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} onShow={onShow} statusBarTranslucent navigationBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, { paddingBottom: (keyboard || insets.bottom) + space.lg, maxHeight: "85%" }]}>
         <View style={styles.handleArea}>
