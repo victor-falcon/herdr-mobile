@@ -29,7 +29,7 @@
         "foregroundImage": "./assets/foreground.png",
         "backgroundImage": "./assets/background.png",
         "monochromeImage": "./assets/monochrome.png",
-        "backgroundColor": "#0d1117"
+        "backgroundColor": "#F3F1EA"
       }
     },
     "plugins": [
