@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
-import { useRef, useState, type ReactNode } from "react";
-import { Alert, Animated, Keyboard, PanResponder, Pressable, Text, View, type StyleProp, type TextStyle } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Alert, Animated, Keyboard, PanResponder, Pressable, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import { fleet } from "../fleet-store";
 import type { Session } from "../hc/fleet";
 import { updateSettings, useSettings } from "../settings";
@@ -343,8 +343,22 @@ function RenameSheet({ renaming, onClose }: { renaming: Renaming | null; onClose
     setShown(renaming);
     setName(renaming?.initial ?? "");
   }
+  // autoFocus alone focuses the field without a keyboard on Android: the
+  // sheet opens while the menu's sheet is still closing, and focusing an
+  // already focused field does nothing. Focus once this sheet is up, and until
+  // the keyboard shows, blur and focus again.
+  const input = useRef<TextInput>(null);
+  const focusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const focus = (tries = 6) => {
+    clearTimeout(focusTimer.current);
+    input.current?.blur();
+    input.current?.focus();
+    if (tries > 1) focusTimer.current = setTimeout(() => !Keyboard.isVisible() && focus(tries - 1), 250);
+  };
+  useEffect(() => () => clearTimeout(focusTimer.current), []);
   const save = async () => {
     if (!renaming) return;
+    clearTimeout(focusTimer.current);
     Keyboard.dismiss();
     setSaving(true);
     try {
@@ -357,15 +371,15 @@ function RenameSheet({ renaming, onClose }: { renaming: Renaming | null; onClose
     }
   };
   return (
-    <Sheet visible={!!renaming} onClose={onClose}>
+    <Sheet visible={!!renaming} onClose={onClose} onShow={() => focus()}>
       <SheetHeader title={renaming?.title ?? ""} />
       <View style={styles.rename}>
         <TextField
+          ref={input}
           label={renaming?.label}
           value={name}
           onChangeText={setName}
           placeholder={renaming?.placeholder}
-          autoFocus
           autoCapitalize="sentences"
           returnKeyType="done"
           onSubmitEditing={() => void save()}
