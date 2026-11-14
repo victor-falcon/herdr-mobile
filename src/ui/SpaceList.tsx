@@ -1,16 +1,17 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { router } from "expo-router";
 import { useRef, useState, type ReactNode } from "react";
 import { Alert, Animated, PanResponder, Pressable, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { fleet } from "../fleet-store";
 import type { Session } from "../hc/fleet";
 import { updateSettings, useSettings } from "../settings";
-import { folderName, statusWords, summarize, type Space, type SpaceTab, type TabItem } from "../spaces";
+import { folderName, statusWords, summarize, tabName, type Space, type SpaceTab, type TabItem } from "../spaces";
 import { AgentAvatar, Avatar, StatusAvatar, StatusMark } from "./Avatar";
 import { Button } from "./Button";
 import { Chip } from "./Chip";
 import { confirmClose } from "./close-session";
-import { Card } from "./Group";
 import { IconButton } from "./IconButton";
+import { startTerminal } from "./new-session";
 import { useLastOpened } from "./last-opened";
 import { ago, agentTitle, sessionTitle, shortPath } from "./session-display";
 import { Sheet, SheetAction, SheetActions, SheetHeader } from "./Sheet";
@@ -22,7 +23,6 @@ type Props = {
   loose: Session[];
   showMachine: boolean;
   onSelect: (s: Session) => void;
-  onStart: (space: Space) => void;
 };
 
 /** What a row closes and renames: a whole tab, or one pane of a split tab. */
@@ -52,7 +52,7 @@ function withSubs(tab: SpaceTab, s: Session): Session[] {
 }
 
 const tabSessions = (tab: SpaceTab) => tab.items.flatMap((i) => (i.kind === "session" ? [i.session] : []));
-const tabTitle = (tab: SpaceTab) => (tab.name && !/^\d+$/.test(tab.name) ? tab.name : null);
+const tabTitle = tabName;
 /** A tab's own rows, without the ones that hang in it from tabs their agents launched. */
 const ownTab = (tab: SpaceTab): SpaceTab => ({ ...tab, items: tab.items.filter((i) => !(i.kind === "session" && i.from)) });
 const isSplit = (tab: SpaceTab) => tab.items.filter((i) => !(i.kind === "session" && i.sub)).length > 1;
@@ -117,7 +117,18 @@ function branchesOf(items: TabItem[]): Branch[] {
 /** How many rows a folded space hides: its panes, not the sub-agents under them. */
 const rowCount = (sp: Space) => sp.tabs.reduce((n, t) => n + t.items.filter((i) => !(i.kind === "session" && (i.sub || i.depth > 0))).length, 0);
 
-export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Props) {
+/** Start a terminal, then open it; says so when it can't. */
+export async function openNew(start: () => Promise<string>) {
+  try {
+    const key = await start();
+    router.push({ pathname: "/session/[key]", params: { key } });
+  } catch (e) {
+    Alert.alert("Could not start it", e instanceof Error ? e.message : String(e));
+  }
+}
+
+/** The spaces as the desktop's sidebar lists them: a small header per space, one line per tab. */
+export function SpaceList({ spaces, loose, showMachine, onSelect }: Props) {
   const colors = useColors();
   const styles = useStyles();
   const { collapsed } = useSettings();
@@ -126,95 +137,90 @@ export function SpaceList({ spaces, loose, showMachine, onSelect, onStart }: Pro
   const rows = useRowMenu();
   const [spaceMenu, setSpaceMenu] = useState<Space | null>(null);
   const actions: Actions = { onSelect, onMenu: rows.open, onClose: rows.close };
-  // A child space has no row of its own: its tabs hang under the agent that launched them.
+  // A child space has no row of its own: its tabs hang under the agent that launched it.
   const shown = spaces.filter((sp) => !sp.nestedUnder);
 
   return (
     <View style={styles.list}>
       {shown.map((sp) => {
-        const where = [showMachine ? sp.target.label : "", sp.folder ? shortPath(sp.folder) : ""].filter(Boolean).join(" · ");
         const isFolded = folded.has(sp.key);
         // Folded, it says in one line what it hides, as the desktop's "2 ▸ 1 blocked".
         const summary = isFolded ? summarize(sp.agents) : null;
         const urgent = summary && summary.status !== "idle" ? summary : null;
         const urgentColor = urgent?.status === "blocked" ? colors.error : urgent?.status === "working" ? colors.working : colors.done;
         return (
-          <View key={sp.key} style={styles.space}>
+          <View key={sp.key}>
             <View style={styles.head}>
               <Pressable
                 onPress={() => toggle(sp)}
                 onLongPress={() => setSpaceMenu(sp)}
                 accessibilityRole="button"
+                accessibilityLabel={sp.name}
                 accessibilityState={{ expanded: !isFolded }}
                 accessibilityHint="Tap to fold or unfold, hold for options"
                 style={({ pressed }) => [styles.headTitle, pressed && styles.headPressed]}
               >
-                <View style={styles.nameLine}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {sp.name}
+                <Text style={styles.name} numberOfLines={1}>
+                  {sp.name}
+                </Text>
+                {showMachine && (
+                  <Text style={styles.machine} numberOfLines={1}>
+                    {sp.target.label}
                   </Text>
-                  {sp.index !== null && (
-                    <View style={styles.index} accessibilityLabel={`Space ${sp.index} on the desktop`}>
-                      <Text style={styles.indexText}>{sp.index}</Text>
-                    </View>
-                  )}
-                  {sp.factory && <Chip label="factory" />}
-                </View>
-                {where ? (
-                  <Text style={styles.where} numberOfLines={1}>
-                    {where}
+                )}
+                {sp.factory && <Chip label="factory" />}
+                <View style={styles.grow} />
+                {urgent && (
+                  <Text style={[styles.foldedSummary, { color: urgentColor }]} numberOfLines={1}>
+                    ▸ {urgent.n} {statusWords(urgent.status)}
                   </Text>
-                ) : null}
+                )}
+                <Text style={styles.count}>{rowCount(sp)}</Text>
+                {isFolded && <Ionicons name="chevron-forward" size={16} color={colors.onSurfaceVariant} />}
               </Pressable>
-              {isFolded ? (
-                <Pressable onPress={() => toggle(sp)} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.folded}>
-                  <Text style={styles.foldedCount}>{rowCount(sp)}</Text>
-                  {urgent && (
-                    <Text style={[styles.foldedSummary, { color: urgentColor }]} numberOfLines={1}>
-                      ▸ {urgent.n} {statusWords(urgent.status)}
-                    </Text>
-                  )}
-                  <Ionicons name="chevron-forward" size={20} color={colors.onSurfaceVariant} />
-                </Pressable>
-              ) : (
-                <IconButton icon="add" variant="tonal" size={48} label={`New tab in ${sp.name}`} onPress={() => onStart(sp)} />
-              )}
+              <IconButton icon="add" size={40} label={`New tab in ${sp.name}`} onPress={() => void openNew(() => startTerminal(sp))} />
             </View>
-            {!isFolded && sp.tabs.length > 0 && (
-              <Card inset={TEXT_INSET}>
-                {sp.tabs.map((tab) => (
-                  <TabRows key={tab.key} space={sp} tab={tab} actions={actions} />
-                ))}
-              </Card>
-            )}
+            {!isFolded && sp.tabs.map((tab, i) => <TabRows key={tab.key} space={sp} tab={tab} number={i + 1} actions={actions} />)}
           </View>
         );
       })}
       {loose.length > 0 && (
-        <View style={styles.space}>
-          <View style={[styles.head, styles.looseHead]}>
-            <Text style={[styles.name, styles.dim]} accessibilityRole="header">
+        <View>
+          <View style={styles.head}>
+            <Text style={[styles.name, styles.looseHead]} accessibilityRole="header">
               Not in a space
             </Text>
           </View>
-          <Card inset={TEXT_INSET}>
-            {loose.map((s) => {
-              const target = agentTarget(s, null);
-              return (
-                <Swipe key={s.key} onClose={() => rows.close(target)}>
-                  <AgentRow session={s} onPress={() => onSelect(s)} onLongPress={() => rows.open(target)} />
-                </Swipe>
-              );
-            })}
-          </Card>
+          {loose.map((s) => {
+            const target = agentTarget(s, null);
+            return (
+              <Swipe key={s.key} flat onClose={() => rows.close(target)}>
+                <SidebarRow session={s} title={agentTitle(s)} onPress={() => onSelect(s)} onLongPress={() => rows.open(target)} />
+              </Swipe>
+            );
+          })}
         </View>
       )}
 
       <Sheet visible={!!spaceMenu} onClose={() => setSpaceMenu(null)}>
         {spaceMenu && (
           <>
-            <SheetHeader title={spaceMenu.name} meta={spaceMenu.folder ? shortPath(spaceMenu.folder) : undefined} icon="folder-outline" />
+            <SheetHeader
+              title={spaceMenu.name}
+              meta={[spaceMenu.target.label, spaceMenu.folder ? shortPath(spaceMenu.folder) : ""].filter(Boolean).join(" · ")}
+              icon="folder-outline"
+            />
             <SheetActions>
+              <SheetAction
+                icon="add"
+                label="New tab"
+                detail="A terminal in the space's folder"
+                onPress={() => {
+                  const sp = spaceMenu;
+                  setSpaceMenu(null);
+                  void openNew(() => startTerminal(sp));
+                }}
+              />
               <SheetAction
                 icon="pencil"
                 label="Rename space"
@@ -271,6 +277,18 @@ export function useRowMenu() {
               }
             />
             <SheetActions>
+              {menu.tab && menu.space && !menu.tab.id.includes(":") && (
+                <SheetAction
+                  icon="add"
+                  label="New pane"
+                  detail="A terminal beside it in this tab"
+                  onPress={() => {
+                    const { space, tab } = menu;
+                    setMenu(null);
+                    if (space && tab) void openNew(() => startTerminal(space, tab.id));
+                  }}
+                />
+              )}
               {menu.tab && menu.space && (
                 <SheetAction
                   icon="pencil"
@@ -282,7 +300,7 @@ export function useRowMenu() {
                     setRenaming({
                       title: "Rename tab",
                       label: "Tab name",
-                      placeholder: "Leave empty to use its number",
+                      placeholder: "Leave empty to use the agent's title",
                       initial: tabTitle(tab) ?? "",
                       save: (name) => fleet.renameTab(space.target, space.id, tab.id, name),
                     });
@@ -357,51 +375,126 @@ function RenameSheet({ renaming, onClose }: { renaming: Renaming | null; onClose
   );
 }
 
-/** A tab with one pane is one block of rows; a split tab gets an inner container with its name over its panes. */
-function TabRows({ space, tab, actions }: { space: Space; tab: SpaceTab; actions: Actions }) {
-  const colors = useColors();
-  const styles = useStyles();
+/** A tab: one line, or for a split tab its name over a line per pane. */
+function TabRows({ space, tab, number, actions }: { space: Space; tab: SpaceTab; number: number; actions: Actions }) {
   // Rows launched from here act on their own tab and space, never on this one.
   const own = ownTab(tab);
   const split = isSplit(own);
   const whole = wholeTab(space, own);
   const branches = branchesOf(tab.items);
+  const indent = split ? 1 : 0;
 
   const row = (item: TabItem, i: number) => {
     if (item.kind === "mod")
-      return <ModRow key={item.key} name={item.name} nested={split} onLongPress={() => actions.onMenu({ ...whole, title: item.name, sessions: [], scope: "pane", lead: "mod" })} />;
+      return <SidebarRow key={item.key} mod title={item.name} indent={indent} onLongPress={() => actions.onMenu({ ...whole, title: item.name, sessions: [], scope: "pane", lead: "mod" })} />;
     const s = item.session;
     const target = item.from ? sessionTarget(item.from.space, ownTab(item.from.tab), item) : sessionTarget(space, own, item);
     // A row from another space says which, so it is still clear where it runs.
     const hint = item.from && item.from.space !== space && !item.sub ? item.from.space.name : null;
-    const onPress = () => actions.onSelect(s);
-    const onLongPress = () => actions.onMenu(target);
-    const name = item.from ? (isSplit(ownTab(item.from.tab)) ? null : item.from.tab.name) : split ? null : tab.name;
+    // The name someone gave the tab beats the agent's own title; a pane of a split tab keeps its own.
+    const homeTab = item.from ? ownTab(item.from.tab) : own;
+    const top = !item.sub && (item.from ? true : item.depth === 0);
+    const named = top && !isSplit(homeTab) ? tabName(homeTab) : null;
+    const title = named ?? (s.terminal.status ? agentTitle(s) : sessionTitle(s));
     return (
-      <Swipe key={s.key} nested={split} onClose={() => actions.onClose(target)}>
-        {s.terminal.status ? (
-          <AgentRow session={s} branch={branches[i]} hint={hint} nested={split} onPress={onPress} onLongPress={onLongPress} />
-        ) : (
-          <TerminalRow session={s} branch={branches[i]} hint={hint} name={name} nested={split} onPress={onPress} onLongPress={onLongPress} />
-        )}
+      <Swipe key={s.key} flat onClose={() => actions.onClose(target)}>
+        <SidebarRow
+          session={s}
+          title={title}
+          hint={hint}
+          number={!split && i === 0 && !item.from ? number : undefined}
+          branch={branches[i]}
+          indent={indent}
+          onPress={() => actions.onSelect(s)}
+          onLongPress={() => actions.onMenu(target)}
+        />
       </Swipe>
     );
   };
   if (!split) return <View>{tab.items.map(row)}</View>;
   return (
-    <View style={styles.splitOuter}>
-      <View style={styles.split}>
-        <Swipe nested onClose={() => actions.onClose(whole)} disabled={whole.sessions.length === 0}>
-          <Pressable onLongPress={() => actions.onMenu(whole)} accessibilityHint="Hold for options" style={({ pressed }) => [styles.tabHead, pressed && styles.nestedPressed]}>
-            <Ionicons name="albums-outline" size={20} color={colors.onSurfaceVariant} />
-            <Text style={styles.tabName} numberOfLines={1}>
-              {tab.name || "New tab"}
-            </Text>
-          </Pressable>
-        </Swipe>
-        {tab.items.map(row)}
-      </View>
+    <View>
+      <Swipe flat onClose={() => actions.onClose(whole)} disabled={whole.sessions.length === 0}>
+        <SidebarRow tabHead title={tabName(tab) ?? `Tab ${number}`} number={number} onLongPress={() => actions.onMenu(whole)} />
+      </Swipe>
+      {tab.items.map(row)}
     </View>
+  );
+}
+
+// A sidebar row's geometry: an icon per level, each sub-agent a level in from its parent.
+const ICON = 20;
+const STEP = 20;
+const PAD = 12;
+const levelX = (indent: number, level: number) => PAD + (indent + level - 1) * STEP + ICON / 2;
+
+/**
+ * One line of the sidebar: an agent or terminal (`session`), a split tab's
+ * name (`tabHead`) or a desktop panel (`mod`), with its status at the end.
+ */
+function SidebarRow({
+  session,
+  title,
+  hint,
+  number,
+  branch,
+  indent = 0,
+  tabHead,
+  mod,
+  onPress,
+  onLongPress,
+}: {
+  session?: Session;
+  title: string;
+  hint?: string | null;
+  number?: number;
+  branch?: Branch;
+  indent?: number;
+  tabHead?: boolean;
+  mod?: boolean;
+  onPress?: () => void;
+  onLongPress: () => void;
+}) {
+  const colors = useColors();
+  const styles = useStyles();
+  const selected = useLastOpened() === session?.key && !!session;
+  const depth = branch?.depth ?? 0;
+  const lines = branch ? (
+    <View pointerEvents="none" style={styles.s_branches}>
+      {branch.through.map((on, l) => (on ? <View key={l} style={[styles.s_trunk, { left: levelX(indent, l + 1) }]} /> : null))}
+      {depth > 0 && !branch.last ? <View style={[styles.s_trunk, { left: levelX(indent, depth) }]} /> : null}
+      {depth > 0 ? <View style={[styles.s_bend, { left: levelX(indent, depth), width: STEP - ICON / 2 - 2 }]} /> : null}
+      {branch.parent ? <View style={[styles.s_stem, { left: levelX(indent, depth + 1), top: "50%", marginTop: ICON / 2 }]} /> : null}
+    </View>
+  ) : null;
+  const icon = session ? (
+    session.terminal.status ? (
+      <AgentAvatar session={session} size={ICON + 2} />
+    ) : (
+      <Ionicons name="terminal-outline" size={16} color={colors.onSurfaceVariant} />
+    )
+  ) : (
+    <Ionicons name={mod ? "grid-outline" : "albums-outline"} size={16} color={colors.onSurfaceVariant} />
+  );
+  return (
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityHint="Hold for options"
+      style={({ pressed }) => [styles.s_row, { paddingLeft: PAD + (indent + depth) * STEP }, selected && styles.s_selected, pressed && !selected && styles.s_pressed]}
+    >
+      {lines}
+      <View style={styles.s_icon}>{icon}</View>
+      <Text style={[styles.s_title, (tabHead || mod) && styles.s_dim, depth > 0 && styles.s_subTitle]} numberOfLines={1}>
+        {title}
+        {hint ? <Text style={styles.s_hint}>{`  ${hint}`}</Text> : null}
+      </Text>
+      {mod && <Text style={styles.s_meta}>desktop</Text>}
+      {number !== undefined && !session?.terminal.status && <Text style={styles.s_meta}>{number}</Text>}
+      {session?.terminal.status ? <StatusMark session={session} size={18} /> : null}
+    </Pressable>
   );
 }
 
@@ -409,7 +502,7 @@ const REVEAL = 96; // how far the row slides to show Close
 const TRIGGER = 72; // past this, letting go asks to close
 
 /** Slide a row left to show Close; let go past the mark and it asks first. */
-export function Swipe({ children, onClose, disabled, nested }: { children: ReactNode; onClose: () => void; disabled?: boolean; nested?: boolean }) {
+export function Swipe({ children, onClose, disabled, nested, flat }: { children: ReactNode; onClose: () => void; disabled?: boolean; nested?: boolean; flat?: boolean }) {
   const colors = useColors();
   const styles = useStyles();
   const x = useRef(new Animated.Value(0)).current;
@@ -436,7 +529,7 @@ export function Swipe({ children, onClose, disabled, nested }: { children: React
         <Ionicons name="close" size={20} color={colors.onError} />
         <Text style={styles.swipeText}>Close</Text>
       </Animated.View>
-      <Animated.View style={[nested ? styles.swipeRowNested : styles.swipeRow, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
+      <Animated.View style={[flat ? styles.swipeRowFlat : nested ? styles.swipeRowNested : styles.swipeRow, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
         {children}
       </Animated.View>
     </View>
@@ -488,52 +581,6 @@ function Supporting({ hint, text, style, textFirst }: { hint?: string | null; te
   );
 }
 
-/** A terminal with no agent in it: its program (or the tab's name) and where it is. */
-function TerminalRow({ session, name, nested = false, branch, hint, onPress, onLongPress }: RowProps & { session: Session; name: string | null }) {
-  const colors = useColors();
-  const styles = useStyles();
-  const tree = useBranch(branch, nested);
-  const t = session.terminal;
-  // A tab Herdr only numbered says nothing: show the program instead.
-  const title = name && !/^\d+$/.test(name) ? name : sessionTitle(session);
-  const selected = useLastOpened() === session.key;
-  return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={({ pressed }) => [styles.row, nested && styles.nested, tree.style, selected && styles.selected, pressed && (nested ? styles.nestedPressed : styles.pressed)]}
-    >
-      {tree.lines}
-      <Avatar icon="terminal-outline" size={tree.size} color={colors.onSurfaceVariant} background={colors.surfaceContainerHighest} />
-      <View style={styles.text}>
-        <Text style={branch?.depth ? styles.subTitle : styles.title} numberOfLines={1}>
-          {title}
-        </Text>
-        {hint ? <Supporting hint={hint} /> : <Supporting text={t.cwd ? shortPath(t.cwd) : null} style={styles.path} />}
-      </View>
-    </Pressable>
-  );
-}
-
-/** A pane the desktop draws itself (files, changes, a viewer): shown, but only there. */
-function ModRow({ name, nested, onLongPress }: { name: string; nested: boolean; onLongPress: () => void }) {
-  const colors = useColors();
-  const styles = useStyles();
-  return (
-    <Pressable onLongPress={onLongPress} style={({ pressed }) => [styles.row, nested && styles.nested, pressed && (nested ? styles.nestedPressed : styles.pressed)]}>
-      <Avatar icon="grid-outline" color={colors.onSurfaceVariant} background={nested ? colors.surfaceContainerLow : colors.surfaceContainerHighest} />
-      <View style={styles.text}>
-        <Text style={[styles.title, styles.dim]} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={styles.msg}>Panel on the desktop</Text>
-      </View>
-    </Pressable>
-  );
-}
-
 /**
  * `urgentFirst`: an agent that needs you says why ahead of the hint.
  * `changedAt`: the time the age counts from, when not the agent's own last change (the inbox row's sort time).
@@ -547,14 +594,15 @@ export function AgentRow({
   urgentFirst,
   trailing,
   changedAt,
+  title: named,
   onPress,
   onLongPress,
-}: RowProps & { session: Session; urgentFirst?: boolean; trailing?: ReactNode; changedAt?: number }) {
+}: RowProps & { session: Session; urgentFirst?: boolean; trailing?: ReactNode; changedAt?: number; title?: string | null }) {
   const styles = useStyles();
   const tree = useBranch(branch, nested);
   const sub = (branch?.depth ?? 0) > 0;
   const t = session.terminal;
-  const title = agentTitle(session);
+  const title = named || agentTitle(session);
   const msg = t.status?.msg && !title.includes(t.status.msg) ? t.status.msg : null;
   const blocked = t.status?.state === "blocked" || t.status?.state === "error";
   const selected = useLastOpened() === session.key;
@@ -586,15 +634,28 @@ export function AgentRow({
 }
 
 const useStyles = makeStyles((colors) => ({
-  list: { gap: gap.xl },
-  space: { gap: gap.sm },
-  head: { flexDirection: "row", alignItems: "center", gap: gap.sm, paddingLeft: gap.sm },
-  looseHead: { minHeight: 48 },
-  headTitle: { flex: 1, gap: 2, alignSelf: "stretch", justifyContent: "center", borderRadius: shape.small },
+  list: { gap: gap.md },
+  head: { flexDirection: "row", alignItems: "center", minHeight: 40, paddingLeft: PAD },
+  headTitle: { flex: 1, minHeight: 40, flexDirection: "row", alignItems: "center", gap: gap.sm, borderRadius: shape.small },
   headPressed: { opacity: 0.6 },
-  nameLine: { flexDirection: "row", alignItems: "center", gap: gap.sm },
-  name: { ...emphasized.titleLarge, color: colors.onSurface, flexShrink: 1 },
-  where: { ...typography.labelMedium, color: colors.onSurfaceVariant },
+  name: { ...emphasized.labelLarge, color: colors.onSurfaceVariant, flexShrink: 1 },
+  machine: { ...typography.labelMedium, color: colors.onSurfaceVariant, opacity: 0.8, flexShrink: 1 },
+  looseHead: { paddingVertical: gap.sm },
+  grow: { flex: 1 },
+  count: { ...typography.labelMedium, color: colors.onSurfaceVariant, fontVariant: ["tabular-nums"] },
+  s_row: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 40, paddingRight: PAD, paddingVertical: 6, borderRadius: shape.medium },
+  s_icon: { width: ICON + 2, height: ICON + 2, alignItems: "center", justifyContent: "center" },
+  s_title: { ...typography.bodyMedium, color: colors.onSurface, flex: 1, minWidth: 0 },
+  s_subTitle: { ...typography.bodySmall, fontSize: 13 },
+  s_dim: { color: colors.onSurfaceVariant },
+  s_hint: { ...typography.bodySmall, color: colors.primary },
+  s_meta: { ...typography.labelMedium, color: colors.onSurfaceVariant, fontFamily: fonts.mono, fontWeight: "normal" },
+  s_selected: { backgroundColor: colors.secondaryContainer },
+  s_pressed: { backgroundColor: colors.surfaceContainerHigh },
+  s_branches: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0 },
+  s_trunk: { position: "absolute", top: 0, bottom: 0, width: 1, backgroundColor: colors.outlineVariant },
+  s_bend: { position: "absolute", top: 0, height: "50%", borderLeftWidth: 1, borderBottomWidth: 1, borderColor: colors.outlineVariant, borderBottomLeftRadius: shape.small },
+  s_stem: { position: "absolute", bottom: 0, width: 1, backgroundColor: colors.outlineVariant },
   dim: { color: colors.onSurfaceVariant },
   row: { flexDirection: "row", alignItems: "center", gap: gap.lg, paddingHorizontal: gap.lg, paddingVertical: gap.md, minHeight: 48 },
   nested: { paddingHorizontal: gap.md, paddingVertical: gap.sm },
@@ -605,19 +666,11 @@ const useStyles = makeStyles((colors) => ({
   stem: { position: "absolute", bottom: 0, width: 1, backgroundColor: colors.outlineVariantSubtle },
   pressed: { backgroundColor: colors.surfaceContainerHigh },
   nestedPressed: { backgroundColor: colors.surfaceContainerHighest },
-  splitOuter: { padding: gap.sm },
-  split: { borderRadius: shape.large, backgroundColor: colors.surfaceContainerHigh, overflow: "hidden", paddingBottom: gap.xs },
-  tabHead: { flexDirection: "row", alignItems: "center", gap: gap.sm, minHeight: 40, paddingHorizontal: gap.md, paddingTop: 10, paddingBottom: 2 },
-  tabName: { ...emphasized.titleSmall, color: colors.onSurfaceVariant, flexShrink: 1 },
   text: { flex: 1, minWidth: 0, gap: 2 },
   trailing: { alignItems: "flex-end", gap: gap.xs },
   trailingTop: { flexDirection: "row", alignItems: "center", gap: gap.sm },
   // The session opened last, as the desktop marks its active tab.
   selected: { backgroundColor: colors.secondaryContainer },
-  index: { minWidth: 24, height: 24, paddingHorizontal: 6, borderRadius: shape.small - 2, backgroundColor: colors.surfaceContainerHighest, alignItems: "center", justifyContent: "center" },
-  indexText: { ...typography.labelMedium, color: colors.onSurfaceVariant, fontFamily: fonts.monoMedium, fontWeight: "normal" },
-  folded: { flexDirection: "row", alignItems: "center", gap: gap.sm, minHeight: 48, paddingHorizontal: gap.sm, flexShrink: 1 },
-  foldedCount: { ...emphasized.titleSmall, color: colors.onSurface, fontVariant: ["tabular-nums"] },
   foldedSummary: { ...typography.labelLarge, flexShrink: 1 },
   title: { ...typography.bodyLarge, color: colors.onSurface },
   subTitle: { ...typography.bodyMedium, color: colors.onSurface },
@@ -643,5 +696,6 @@ const useStyles = makeStyles((colors) => ({
   swipeText: { ...typography.labelLarge, color: colors.onError },
   swipeRow: { backgroundColor: colors.surfaceContainerLow },
   swipeRowNested: { backgroundColor: colors.surfaceContainerHigh },
+  swipeRowFlat: { backgroundColor: colors.bg },
   rename: { gap: gap.lg, paddingHorizontal: gap.sm },
 }));

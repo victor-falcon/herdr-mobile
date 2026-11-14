@@ -2,9 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSyncExternalStore } from "react";
 import type { TerminalMode } from "./terminal/TerminalView";
 
-/** A program the + sheet offers, run in the space's folder. */
-export type Agent = { name: string; command: string };
-
 /** What the home screen lists: spaces with their tabs, or every agent most urgent first. */
 export type HomeMode = "spaces" | "inbox";
 
@@ -13,10 +10,6 @@ export type Settings = {
   defaultMode: TerminalMode;
   /** How the bottom bar takes input: keys straight to the terminal, or a message hc pastes. */
   inputMode: "direct" | "message";
-  /** Folders the project picker lists, as globs under the home folder, e.g. ~/Projects/*. */
-  projectDirs: string[];
-  /** The agents to offer, in order; the first is the one a new project starts. */
-  agents: Agent[];
   homeMode: HomeMode;
   /** Spaces folded to one line on the Spaces list, by space key. */
   collapsed: string[];
@@ -26,11 +19,6 @@ const DEFAULTS: Settings = {
   fontSize: 12,
   defaultMode: "fit",
   inputMode: "direct",
-  projectDirs: ["~/workspace/*/*"],
-  agents: [
-    { name: "Pi", command: "pi" },
-    { name: "Claude", command: "claude" },
-  ],
   homeMode: "spaces",
   collapsed: [],
 };

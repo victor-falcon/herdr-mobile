@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
 import type { Session } from "../hc/fleet";
-import type { InboxGroup } from "../spaces";
+import { namedTabOf, type InboxGroup } from "../spaces";
 import { Card } from "./Group";
 import { AgentRow, agentTarget, Swipe, TEXT_INSET, useRowMenu } from "./SpaceList";
 import { SubagentsSheet, SubChip } from "./Subagents";
@@ -41,6 +41,7 @@ export function InboxList({ groups, showMachine, onSelect }: Props) {
                 <Swipe key={session.key} onClose={() => rows.close(target)}>
                   <AgentRow
                     session={session}
+                    title={namedTabOf(space, session.key)}
                     hint={where}
                     urgentFirst
                     changedAt={changedAt}

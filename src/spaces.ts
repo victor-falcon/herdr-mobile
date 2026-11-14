@@ -460,3 +460,18 @@ export function inbox({ spaces: list, loose }: { spaces: Space[]; loose: Session
     return { key, label, agents };
   }).filter((g) => g.agents.length > 0);
 }
+
+/** A tab's name when someone gave it one; Herdr only numbers the rest. */
+export const tabName = (tab: SpaceTab): string | null => (tab.name && !/^\d+$/.test(tab.name) ? tab.name : null);
+
+/**
+ * The name someone gave the tab a session has to itself, which then stands for
+ * the session over the title its agent sets. A pane of a split tab keeps its own.
+ */
+export function namedTabOf(space: Space | null | undefined, key: string): string | null {
+  for (const tab of space?.tabs ?? []) {
+    const own = tab.items.filter((i) => i.kind === "mod" || (!i.sub && i.depth === 0 && !i.from));
+    if (own.length === 1 && own[0].kind === "session" && own[0].session.key === key) return tabName(tab);
+  }
+  return null;
+}
